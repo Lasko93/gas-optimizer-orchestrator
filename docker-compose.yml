@@ -19,3 +19,25 @@ services:
       - "8545:8545"
     volumes:
       - ./ganache-data:/data
+    networks: [opimizernet]
+  truffle:
+    build:
+      context: ./truffle
+    depends_on:
+      - ganache
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    environment:
+      RPC_HOST: ganache
+      RPC_PORT: "8545"
+      TRUFFLE_NETWORK: docker
+      TRUFFLE_INIT: "true"
+      TRUFFLE_COMPILE: "true"
+      TRUFFLE_MIGRATE: "true"
+      NPM_INSTALL: "false"
+    networks: [opimizernet]
+
+networks:
+  opimizernet:
+    driver: bridge
