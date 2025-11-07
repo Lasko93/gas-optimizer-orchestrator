@@ -19,3 +19,20 @@ services:
       - "8545:8545"
     volumes:
       - ./ganache-data:/data
+    networks: [opimizernet]
+  truffle:
+    build:
+      context: ./truffle
+    image: truffle-compiler
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    environment:
+      CONTRACTS_DIR: /workspace/truffle/contracts
+      BUILD_DIR: /workspace/truffle/build/contracts
+    depends_on:
+      - ganache
+    networks: [ opimizernet ]
+networks:
+  opimizernet:
+    driver: bridge
