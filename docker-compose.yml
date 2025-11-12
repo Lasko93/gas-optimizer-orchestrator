@@ -28,8 +28,10 @@ services:
     volumes:
       - ./:/workspace
     environment:
-      CONTRACTS_DIR: /workspace/truffle/contracts
+      PROJECT_DIR: /workspace/truffle
+      CONTRACTS_DIR: /workspace/truffle/projectRoot
       BUILD_DIR: /workspace/truffle/build/contracts
+      STAGED_DIR: /workspace/truffle/staged
     depends_on:
       - ganache
     networks: [ opimizernet ]
