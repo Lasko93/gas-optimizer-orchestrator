@@ -20,21 +20,16 @@ services:
     volumes:
       - ./ganache-data:/data
     networks: [opimizernet]
-  truffle:
-    build:
-      context: ./truffle
-    image: truffle-compiler
-    working_dir: /workspace
+  compiler:
+    image: trailofbits/eth-security-toolbox:nightly
+    container_name: compiler
+    working_dir: /share
+    entrypoint: /bin/bash
+    command: -lc "tail -f /dev/null"
     volumes:
-      - ./:/workspace
-    environment:
-      PROJECT_DIR: /workspace/truffle
-      CONTRACTS_DIR: /workspace/truffle/projectRoot
-      BUILD_DIR: /workspace/truffle/build/contracts
-      STAGED_DIR: /workspace/truffle/staged
-    depends_on:
-      - ganache
-    networks: [ opimizernet ]
+      - ./gas-optimizer-orchestrator/src/main/kotlin/de/orchestrator/gas_optimizer_orchestrator/externalContracts:/share
+    networks: [opimizernet]
+
 networks:
   opimizernet:
     driver: bridge
