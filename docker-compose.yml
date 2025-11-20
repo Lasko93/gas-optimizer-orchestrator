@@ -18,7 +18,7 @@ services:
     ports:
       - "8545:8545"
     volumes:
-      - ./ganache-data:/data
+      - ./gas-optimizer-orchestrator/src/main/kotlin/de/orchestrator/gas_optimizer_orchestrator/ganache-data:/data
     networks: [opimizernet]
   compiler:
     image: trailofbits/eth-security-toolbox:nightly
