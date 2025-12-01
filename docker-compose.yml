@@ -7,6 +7,10 @@ services:
       - 0.0.0.0
       - --port
       - "8545"
+      - --fork
+      - https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}
+      - --fork.blockNumber
+      - "15528165"
       - --miner.blockTime
       - "0"
       - --wallet.mnemonic

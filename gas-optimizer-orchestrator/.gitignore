@@ -32,7 +32,7 @@ out/
 /dist/
 /nbdist/
 /.nb-gradle/
-
+/externalContracts/
 ### VS Code ###
 .vscode/
 

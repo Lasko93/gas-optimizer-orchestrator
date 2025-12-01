@@ -5,9 +5,11 @@ import org.web3j.abi.FunctionEncoder
 import org.web3j.abi.datatypes.Function as Web3Function
 import org.web3j.crypto.Credentials
 import org.web3j.protocol.Web3j
+import org.web3j.protocol.core.methods.request.Transaction
 import org.web3j.protocol.core.methods.response.TransactionReceipt
 import org.web3j.tx.RawTransactionManager
 import org.web3j.tx.gas.DefaultGasProvider
+import org.web3j.tx.response.PollingTransactionReceiptProcessor
 import java.math.BigInteger
 import java.util.Optional
 
@@ -72,5 +74,40 @@ class GanacheService(
             }
             Thread.sleep(500)
         }
+    }
+    fun sendRawTransaction(
+        from: String,
+        to: String,
+        value: BigInteger,
+        gasLimit: BigInteger?,
+        gasPrice: BigInteger?,
+        data: String
+    ): TransactionReceipt {
+        // Annahme: Fork-Node erlaubt "impersonation" von `from`
+        // und lässt eth_sendTransaction ohne private key zu.
+        val tx = Transaction.createFunctionCallTransaction(
+            from,
+            null,                      // nonce: Node setzt selbst oder du holst sie via eth_getTransactionCount
+            gasPrice,                  // kann null sein -> Node setzt selbst
+            gasLimit,                  // kann null sein -> Node schätzt
+            to,
+            value,
+            data
+        )
+
+        val response = web3j.ethSendTransaction(tx).send()
+        if (response.error != null) {
+            throw RuntimeException("ethSendTransaction error: ${response.error.message}")
+        }
+
+        val txHash = response.transactionHash
+
+        val receiptProcessor = PollingTransactionReceiptProcessor(
+            web3j,
+            1000L,
+            40
+        )
+
+        return receiptProcessor.waitForTransactionReceipt(txHash)
     }
 }

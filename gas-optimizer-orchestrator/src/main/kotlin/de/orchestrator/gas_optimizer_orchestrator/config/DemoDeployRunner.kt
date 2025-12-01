@@ -1,6 +1,7 @@
 package de.orchestrator.gas_optimizer_orchestrator.config
 
 import de.orchestrator.gas_optimizer_orchestrator.web.service.DeployService
+import de.orchestrator.gas_optimizer_orchestrator.web.service.EtherScanService
 import de.orchestrator.gas_optimizer_orchestrator.web.service.InteractionService
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Bean
@@ -11,14 +12,16 @@ import java.math.BigInteger
 @Configuration
 class DemoDeployConfig(
     private val deployService: DeployService,
-    private val interactionService: InteractionService
+    private val interactionService: InteractionService,
+    private val etherScanService: EtherScanService
+
 ) {
 
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
         val artifactFile =
-            File("C:\\Users\\laskevic\\IdeaProjects\\gas-optimizer-orchestrator\\gas-optimizer-orchestrator\\src\\main\\kotlin\\de\\orchestrator\\gas_optimizer_orchestrator\\externalContracts\\vault-v2\\out\\VaultV2Factory.sol\\VaultV2Factory.json")
-        val receipt = deployService.deployContractFromJson(artifactFile)
+            File("C:\\Users\\laskevic\\IdeaProjects\\gas-optimizer-orchestrator\\gas-optimizer-orchestrator\\src\\main\\kotlin\\de\\orchestrator\\gas_optimizer_orchestrator\\externalContracts\\seadrop\\out\\SeaDrop.sol\\SeaDrop.json")
+        /*val receipt = deployService.deployContractFromJson(artifactFile)
 
         println(
             """
@@ -29,11 +32,19 @@ class DemoDeployConfig(
         Gas Used:         ${receipt.gasUsed}
         Status:           ${receipt.status}   // 0x1 = success
         """.trimIndent()
-        )
+        )*/
 
-        val report = interactionService.measureInteractionsFromAbi(
+        val transactionsOfMainnet = etherScanService.getTransactionsForAddress("0x00005EA00Ac477B1030CE78506496e8C2dE24bf5")
+        val uniqueFunctionTxs = transactionsOfMainnet
+            .filter { it.input != "0x" }
+            .distinctBy { it.functionName }
+            .sortedBy { it.timeStamp.toLong() }
+        etherScanService.printTransactionsDebug(uniqueFunctionTxs)
+
+        val report = interactionService.measureInteractionsFromAbiUsingMainnetTx(
             artifactFile = artifactFile,
-            contractAddress = receipt.contractAddress
+            contractAddress = transactionsOfMainnet.first().contractAddress,
+            uniqueFunctionTxs
         )
 
         println("=== Interaction Results (successes=${report.successes.size}, errors=${report.errors.size}) ===")
