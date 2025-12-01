@@ -1,4 +1,4 @@
-package de.orchestrator.gas_optimizer_orchestrator.domain
+package de.orchestrator.gas_optimizer_orchestrator.model
 
 data class EtherscanTransaction(
     val blockNumber: String,
