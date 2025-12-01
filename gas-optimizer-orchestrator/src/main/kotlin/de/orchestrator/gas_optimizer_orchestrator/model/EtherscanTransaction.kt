@@ -7,7 +7,7 @@ data class EtherscanTransaction(
     val nonce: String,
     val blockHash: String,
     val transactionIndex: String,
-    val from: String,
+    var from: String,
     val to: String?,
     val value: String,
     val gas: String,

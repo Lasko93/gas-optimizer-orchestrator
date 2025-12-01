@@ -80,7 +80,7 @@ class EtherScanService(
         startBlock: Long = 0,
         endBlock: Long = 9_999_999_999,
         page: Int = 1,
-        offset: Int = 10_000,
+        offset: Int = 500,
         sort: String = "asc"
     ): List<EtherscanTransaction> {
 
@@ -118,6 +118,7 @@ class EtherScanService(
         }
 
         // Parse JSON → Kotlin objects
+
         val allTx = mapper.readerForListOf(EtherscanTransaction::class.java).readValue<List<EtherscanTransaction>>(arr)
 
         // -------------------------------------------------------

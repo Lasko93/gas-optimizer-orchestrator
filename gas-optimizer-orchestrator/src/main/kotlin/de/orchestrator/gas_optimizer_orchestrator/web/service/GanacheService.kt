@@ -1,8 +1,7 @@
 package de.orchestrator.gas_optimizer_orchestrator.web.service
 
+import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import org.springframework.stereotype.Service
-import org.web3j.abi.FunctionEncoder
-import org.web3j.abi.datatypes.Function as Web3Function
 import org.web3j.crypto.Credentials
 import org.web3j.protocol.Web3j
 import org.web3j.protocol.core.methods.request.Transaction
@@ -16,7 +15,7 @@ import java.util.Optional
 @Service
 class GanacheService(
     private val web3j: Web3j,
-    private val credentials: Credentials,
+    credentials: Credentials,
     private val gasProvider: DefaultGasProvider
 ) {
 
@@ -29,52 +28,39 @@ class GanacheService(
     fun gasLimit(): BigInteger = gasProvider.gasLimit
 
     /**
-     * Sendet einen Funktions-Call an einen existierenden Contract.
+     * RAW CONTRACT DEPLOYMENT
+     * to = "" and data = bytecode
      */
-    fun sendFunctionTx(
-        contractAddress: String,
-        function: Web3Function,
-        value: BigInteger = BigInteger.ZERO
-    ): TransactionReceipt {
-        val encoded = FunctionEncoder.encode(function)
-        val txResponse = txManager.sendTransaction(
-            gasPrice(),
-            gasLimit(),
-            contractAddress,
-            encoded,
-            value
-        )
-        return waitForReceipt(txResponse.transactionHash)
-    }
+    fun deployContract(bytecode: String, value: BigInteger = BigInteger.ZERO): TransactionReceipt {
 
-    /**
-     * Deployt einen Contract-Bytecode (to = "", data = bytecode).
-     */
-    fun deployContract(
-        bytecode: String,
-        value: BigInteger = BigInteger.ZERO
-    ): TransactionReceipt {
-        val txResponse = txManager.sendTransaction(
+        val tx = txManager.sendTransaction(
             gasPrice(),
             gasLimit(),
-            "",          // leere Adresse = Contract-Deployment
+            "",     // empty → contract deployment
             bytecode,
             value
         )
-        return waitForReceipt(txResponse.transactionHash)
+
+        return waitForReceipt(tx.transactionHash)
     }
 
-    private fun waitForReceipt(txHash: String): TransactionReceipt {
+    /**
+     * Helper for waiting on receipts.
+     */
+    private fun waitForReceipt(hash: String): TransactionReceipt {
         var receiptOpt: Optional<TransactionReceipt>
+
         while (true) {
-            val response = web3j.ethGetTransactionReceipt(txHash).send()
-            receiptOpt = response.transactionReceipt
-            if (receiptOpt.isPresent) {
-                return receiptOpt.get()
-            }
-            Thread.sleep(500)
+            val resp = web3j.ethGetTransactionReceipt(hash).send()
+            receiptOpt = resp.transactionReceipt
+            if (receiptOpt.isPresent) return receiptOpt.get()
+            Thread.sleep(300)
         }
     }
+
+    /**
+     * For forked mainnet: send a tx "as any address"
+     */
     fun sendRawTransaction(
         from: String,
         to: String,
@@ -83,31 +69,49 @@ class GanacheService(
         gasPrice: BigInteger?,
         data: String
     ): TransactionReceipt {
-        // Annahme: Fork-Node erlaubt "impersonation" von `from`
-        // und lässt eth_sendTransaction ohne private key zu.
+
         val tx = Transaction.createFunctionCallTransaction(
             from,
-            null,                      // nonce: Node setzt selbst oder du holst sie via eth_getTransactionCount
-            gasPrice,                  // kann null sein -> Node setzt selbst
-            gasLimit,                  // kann null sein -> Node schätzt
+            null,
+            gasPrice,
+            gasLimit,
             to,
             value,
             data
         )
 
-        val response = web3j.ethSendTransaction(tx).send()
-        if (response.error != null) {
-            throw RuntimeException("ethSendTransaction error: ${response.error.message}")
+        val send = web3j.ethSendTransaction(tx).send()
+        if (send.error != null) {
+            throw RuntimeException(send.error.message)
         }
 
-        val txHash = response.transactionHash
-
-        val receiptProcessor = PollingTransactionReceiptProcessor(
-            web3j,
-            1000L,
-            40
-        )
-
-        return receiptProcessor.waitForTransactionReceipt(txHash)
+        val txHash = send.transactionHash
+        val processor = PollingTransactionReceiptProcessor(web3j, 1000L, 40)
+        return processor.waitForTransactionReceipt(txHash)
     }
+
+    fun sendInteraction(interaction: ExecutableInteraction): TransactionReceipt {
+
+        val encoded = interaction.encoded()
+
+        val from = accounts[0]
+        val to = interaction.contractAddress
+        val value = interaction.value
+
+        val gasLimit =
+            interaction.tx.gas.toBigIntegerOrNull() ?: gasLimit()
+
+        val gasPrice =
+            interaction.tx.gasPrice.toBigIntegerOrNull() ?: gasPrice()
+
+        return sendRawTransaction(
+            from = from,
+            to = to,
+            value = value,
+            gasLimit = gasLimit,
+            gasPrice = gasPrice,
+            data = encoded
+        )
+    }
+
 }
