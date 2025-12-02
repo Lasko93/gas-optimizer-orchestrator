@@ -11,7 +11,6 @@ import org.springframework.web.client.RestClient
 class EtherScanService(
     @Value("\${etherscan.api-key}") private val apiKey: String,
     @Value("\${etherscan.base-url:https://api.etherscan.io/v2/api}") baseUrl: String,
-    @Value("\${alchemy.api-key}") private val alchemyApiKey: String,
     private val alchemyService: AlchemyService,
     webClientBuilder: RestClient.Builder
 ) {
@@ -67,7 +66,6 @@ class EtherScanService(
         if (sourceCode.isBlank()) {
             throw EtherScanException("0", "Contract has no verified source code on Etherscan")
         }
-
         return sourceCode
     }
 

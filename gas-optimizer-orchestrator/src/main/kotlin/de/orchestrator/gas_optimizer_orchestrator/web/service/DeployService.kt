@@ -6,7 +6,7 @@ import java.math.BigInteger
 
 @Service
 class DeployService(
-    private val ganacheService: GanacheService
+    private val anvilService: AnvilService
 ) {
 
     /**
@@ -25,7 +25,7 @@ class DeployService(
             "Bytecode too short; contract does not exist."
         }
 
-        val receipt = ganacheService.deployContract(
+        val receipt = anvilService.deployContract(
             bytecode = bytecode,
             value = BigInteger.ZERO
         )

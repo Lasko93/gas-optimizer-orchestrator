@@ -13,7 +13,7 @@ import java.math.BigInteger
 import java.util.Optional
 
 @Service
-class GanacheService(
+class AnvilService(
     private val web3j: Web3j,
     credentials: Credentials,
     private val gasProvider: DefaultGasProvider
@@ -22,7 +22,6 @@ class GanacheService(
     private val txManager = RawTransactionManager(web3j, credentials)
     private val accounts: List<String> = web3j.ethAccounts().send().accounts
 
-    fun getAccounts(): List<String> = accounts
 
     fun gasPrice(): BigInteger = gasProvider.gasPrice
     fun gasLimit(): BigInteger = gasProvider.gasLimit
@@ -44,19 +43,6 @@ class GanacheService(
         return waitForReceipt(tx.transactionHash)
     }
 
-    /**
-     * Helper for waiting on receipts.
-     */
-    private fun waitForReceipt(hash: String): TransactionReceipt {
-        var receiptOpt: Optional<TransactionReceipt>
-
-        while (true) {
-            val resp = web3j.ethGetTransactionReceipt(hash).send()
-            receiptOpt = resp.transactionReceipt
-            if (receiptOpt.isPresent) return receiptOpt.get()
-            Thread.sleep(300)
-        }
-    }
 
     /**
      * For forked mainnet: send a tx "as any address"
@@ -114,4 +100,17 @@ class GanacheService(
         )
     }
 
+    /**
+     * Helper for waiting on receipts.
+     */
+    private fun waitForReceipt(hash: String): TransactionReceipt {
+        var receiptOpt: Optional<TransactionReceipt>
+
+        while (true) {
+            val resp = web3j.ethGetTransactionReceipt(hash).send()
+            receiptOpt = resp.transactionReceipt
+            if (receiptOpt.isPresent) return receiptOpt.get()
+            Thread.sleep(300)
+        }
+    }
 }

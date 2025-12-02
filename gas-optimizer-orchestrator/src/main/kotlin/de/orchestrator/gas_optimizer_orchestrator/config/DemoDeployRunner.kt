@@ -1,8 +1,9 @@
 package de.orchestrator.gas_optimizer_orchestrator.config
 
+import de.orchestrator.gas_optimizer_orchestrator.docker.AnvilContainerManager
 import de.orchestrator.gas_optimizer_orchestrator.web.service.DeployService
 import de.orchestrator.gas_optimizer_orchestrator.web.service.EtherScanService
-import de.orchestrator.gas_optimizer_orchestrator.web.service.GanacheService
+import de.orchestrator.gas_optimizer_orchestrator.web.service.AnvilService
 import de.orchestrator.gas_optimizer_orchestrator.web.service.InteractionService
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Bean
@@ -15,19 +16,16 @@ class DemoDeployConfig(
     private val deployService: DeployService,
     private val interactionService: InteractionService,
     private val etherScanService: EtherScanService,
-    private val ganacheService: GanacheService
+    private val anvilService: AnvilService,
 ) {
 
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        val target = "0x00005ea00ac477b1030ce78506496e8c2de24bf5"
+        val target = "0x71cfeFd6b9208d2F639E78cfdcB3cf0739d2B9A6"
 
-
-        val bytecode = etherScanService.getContractBytecode(target)
         val transactions = etherScanService.getTransactionsForAddress(target)
         val abi = etherScanService.getContractAbi(target)
-
 
         println("First Transaction:  ${transactions[0]}")
         println("This is the abi:  $abi")
@@ -47,11 +45,13 @@ class DemoDeployConfig(
         }
         println("Found ${interactions.size} payable interactions")
 
+
+
         interactions.forEach { interaction ->
 
             println("Sending interaction: ${interaction.functionName}")
 
-            val r = ganacheService.sendInteraction(interaction)
+            val r = anvilService.sendInteraction(interaction)
 
             println(
                 """

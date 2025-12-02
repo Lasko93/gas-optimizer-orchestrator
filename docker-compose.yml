@@ -12,7 +12,7 @@ services:
       - --fork-url
       - https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}
       - --fork-block-number
-      - "15528165"
+      - "23924321"
       - --chain-id
       - "1"
       - --code-size-limit
