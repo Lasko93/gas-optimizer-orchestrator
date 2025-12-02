@@ -20,8 +20,6 @@ class AnvilInteractionService(
 ) {
 
     private val txManager = RawTransactionManager(web3j, credentials)
-    private val accounts: List<String> = web3j.ethAccounts().send().accounts
-
 
     fun gasPrice(): BigInteger = gasProvider.gasPrice
     fun gasLimit(): BigInteger = gasProvider.gasLimit
@@ -80,7 +78,7 @@ class AnvilInteractionService(
 
         val encoded = interaction.encoded()
 
-        val from = accounts[0]
+        val from = interaction.fromAddress
         val to = interaction.contractAddress
         val value = interaction.value
 

@@ -1,5 +1,6 @@
 package de.orchestrator.gas_optimizer_orchestrator.config
 
+import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.service.DeployService
 import de.orchestrator.gas_optimizer_orchestrator.externalApi.EtherScanService
 import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService
@@ -12,16 +13,16 @@ import org.web3j.abi.FunctionEncoder
 
 @Configuration
 class DemoDeployConfig(
-    private val deployService: DeployService,
     private val interactionCreationService: InteractionCreationService,
     private val etherScanService: EtherScanService,
     private val anvilInteractionService: AnvilInteractionService,
+    private val dockerComposeAnvilManager: DockerComposeAnvilManager
 ) {
 
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        val target = "0x71cfeFd6b9208d2F639E78cfdcB3cf0739d2B9A6"
+        val target = "0x61577E532D850dC7D6a8A81bCB945c01ba33a457"
 
         val transactions = etherScanService.getTransactionsForAddress(target)
         val abi = etherScanService.getContractAbi(target)
@@ -48,18 +49,22 @@ class DemoDeployConfig(
 
         interactions.forEach { interaction ->
 
-            println("Sending interaction: ${interaction.functionName}")
+            println("Spinning up fork for block ${interaction.blockNumber}")
 
-            val r = anvilInteractionService.sendInteraction(interaction)
+            //Sometimes requires the exact block and sometimes the previous --> implement Service that does both
+            dockerComposeAnvilManager.withAnvilFork(interaction.blockNumber.toLong()-1) {
+                val result = anvilInteractionService.sendInteraction(interaction)
 
-            println(
-                """
-            Function   : ${interaction.functionName}
-            TxHash     : ${r.transactionHash}
-            GasUsed    : ${r.gasUsed}
-            Status     : ${r.status}
-        """.trimIndent()
-            )
+                println(
+                    """
+                Function   : ${interaction.functionName}
+                TxHash     : ${result.transactionHash}
+                GasUsed    : ${result.gasUsed}
+                Status     : ${result.status}
+                Blocknumber: ${result.blockNumber}
+            """.trimIndent()
+                )
+            }
         }
     }
 }

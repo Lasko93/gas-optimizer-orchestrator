@@ -22,10 +22,10 @@ class InteractionCreationService(
         val abi: List<JsonNode> = objectMapper.readTree(abiJson).toList()
 
         return transactions
-            .filter { it.input.startsWith("0x") && it.input.length > 10 }
+            .filter { it.input.startsWith("0x") && it.input.length > 10 && it.to !== null}
             .mapNotNull { tx ->
 
-                val selector = tx.input.substring(0, 10)
+                val selector = tx.input.take(10)
 
                 val fn = abi.find {
                     it["type"].asText() == "function" &&
@@ -43,6 +43,7 @@ class InteractionCreationService(
 
                 ExecutableInteraction(
                     blockNumber = tx.blockNumber,
+                    fromAddress = tx.from,
                     selector = selector,
                     functionName = fnName,
                     contractAddress = contractAddress,

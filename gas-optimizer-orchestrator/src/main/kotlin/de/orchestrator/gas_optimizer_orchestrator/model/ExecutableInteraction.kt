@@ -6,7 +6,8 @@ import org.web3j.abi.FunctionEncoder
 import java.math.BigInteger
 
 data class ExecutableInteraction(
-    val blockNumber: String? = null,
+    val blockNumber: String,
+    val fromAddress: String,
     val selector: String,
     val functionName: String,
     val contractAddress: String,
