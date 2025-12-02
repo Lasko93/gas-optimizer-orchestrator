@@ -1,4 +1,4 @@
-package de.orchestrator.gas_optimizer_orchestrator.web.service
+package de.orchestrator.gas_optimizer_orchestrator.service
 
 import org.springframework.stereotype.Service
 import org.web3j.protocol.core.methods.response.TransactionReceipt
@@ -6,7 +6,7 @@ import java.math.BigInteger
 
 @Service
 class DeployService(
-    private val anvilService: AnvilService
+    private val anvilInteractionService: AnvilInteractionService
 ) {
 
     /**
@@ -25,7 +25,7 @@ class DeployService(
             "Bytecode too short; contract does not exist."
         }
 
-        val receipt = anvilService.deployContract(
+        val receipt = anvilInteractionService.deployContract(
             bytecode = bytecode,
             value = BigInteger.ZERO
         )

@@ -1,4 +1,4 @@
-package de.orchestrator.gas_optimizer_orchestrator.web.service
+package de.orchestrator.gas_optimizer_orchestrator.service
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service
 import java.math.BigInteger
 
 @Service
-class InteractionService(
+class InteractionCreationService(
     private val objectMapper: ObjectMapper,
 ) {
 

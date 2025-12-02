@@ -1,4 +1,4 @@
-package de.orchestrator.gas_optimizer_orchestrator.web.service
+package de.orchestrator.gas_optimizer_orchestrator.service
 
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import org.springframework.stereotype.Service
@@ -13,7 +13,7 @@ import java.math.BigInteger
 import java.util.Optional
 
 @Service
-class AnvilService(
+class AnvilInteractionService(
     private val web3j: Web3j,
     credentials: Credentials,
     private val gasProvider: DefaultGasProvider

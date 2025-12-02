@@ -1,10 +1,9 @@
 package de.orchestrator.gas_optimizer_orchestrator.config
 
-import de.orchestrator.gas_optimizer_orchestrator.docker.AnvilContainerManager
-import de.orchestrator.gas_optimizer_orchestrator.web.service.DeployService
-import de.orchestrator.gas_optimizer_orchestrator.web.service.EtherScanService
-import de.orchestrator.gas_optimizer_orchestrator.web.service.AnvilService
-import de.orchestrator.gas_optimizer_orchestrator.web.service.InteractionService
+import de.orchestrator.gas_optimizer_orchestrator.service.DeployService
+import de.orchestrator.gas_optimizer_orchestrator.externalApi.EtherScanService
+import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService
+import de.orchestrator.gas_optimizer_orchestrator.service.InteractionCreationService
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -14,9 +13,9 @@ import org.web3j.abi.FunctionEncoder
 @Configuration
 class DemoDeployConfig(
     private val deployService: DeployService,
-    private val interactionService: InteractionService,
+    private val interactionCreationService: InteractionCreationService,
     private val etherScanService: EtherScanService,
-    private val anvilService: AnvilService,
+    private val anvilInteractionService: AnvilInteractionService,
 ) {
 
     @Bean
@@ -30,7 +29,7 @@ class DemoDeployConfig(
         println("First Transaction:  ${transactions[0]}")
         println("This is the abi:  $abi")
 
-        val interactions = interactionService.buildInteractions(
+        val interactions = interactionCreationService.buildInteractions(
             abiJson = abi,
             contractAddress = target,
             transactions = transactions
@@ -51,7 +50,7 @@ class DemoDeployConfig(
 
             println("Sending interaction: ${interaction.functionName}")
 
-            val r = anvilService.sendInteraction(interaction)
+            val r = anvilInteractionService.sendInteraction(interaction)
 
             println(
                 """
