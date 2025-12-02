@@ -3,23 +3,26 @@ services:
     image: ghcr.io/foundry-rs/foundry:latest
     container_name: anvil
     entrypoint: []
-    command:
-      - anvil
-      - --host
-      - 0.0.0.0
-      - --port
-      - "8545"
-      - --fork-url
-      - https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}
-      - --fork-block-number
-      - "${ANVIL_FORK_BLOCK:-23924320}"
-      - --chain-id
-      - "1"
-      - --code-size-limit
-      - "4294967295"
-      - --auto-impersonate
+    command: >
+      sh -c '
+        if [ "$ENABLE_FORK" = "true" ]; then
+          echo "🚀 Starting ANVIL WITH fork...";
+          anvil --host 0.0.0.0 --port 8545 \
+                --fork-url https://eth-mainnet.g.alchemy.com/v2/$ALCHEMY_API_KEY \
+                --fork-block-number $ANVIL_FORK_BLOCK \
+                --auto-impersonate --chain-id 1 --code-size-limit 4294967295;
+        else
+          echo "🔧 Starting ANVIL WITHOUT fork...";
+          anvil --host 0.0.0.0 --port 8545 \
+                --auto-impersonate --chain-id 1 --code-size-limit 4294967295;
+        fi
+      '
     ports:
       - "8545:8545"
+    environment:
+      ENABLE_FORK: "${ENABLE_FORK:-false}"
+      ALCHEMY_API_KEY: "${ALCHEMY_API_KEY:-}"
+      ANVIL_FORK_BLOCK: "${ANVIL_FORK_BLOCK:-0}"
     networks: [opimizernet]
 
 networks:

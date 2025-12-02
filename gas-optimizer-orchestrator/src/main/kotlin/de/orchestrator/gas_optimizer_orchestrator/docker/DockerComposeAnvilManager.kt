@@ -26,16 +26,46 @@ class DockerComposeAnvilManager(
 
 
     fun startAnvilFork(blockNumber: Long) {
-        val env = mapOf("ANVIL_FORK_BLOCK" to blockNumber.toString())
+        val env = mapOf(
+            "ENABLE_FORK" to "true",
+            "ANVIL_FORK_BLOCK" to blockNumber.toString(),
+            // Pass the API key through to Docker Compose if it exists in system env
+            "ALCHEMY_API_KEY" to (System.getenv("ALCHEMY_API_KEY") ?: "")
+        )
 
         println("Starting Anvil fork at block $blockNumber")
 
         runCommand(
-            listOf("docker", "compose", "-f", composeFile.absolutePath, "up", "-d", "--force-recreate"),
+            listOf(
+                "docker", "compose",
+                "-f", composeFile.absolutePath,
+                "up", "-d", "--force-recreate"
+            ),
             env
         )
     }
 
+    /**
+     * Start Anvil WITHOUT fork (ENABLE_FORK=false).
+     */
+    fun startAnvilNoFork() {
+        val env = mapOf(
+            "ENABLE_FORK" to "false",
+            "ALCHEMY_API_KEY" to "",
+            "ANVIL_FORK_BLOCK" to "0"
+        )
+
+        println("Starting Anvil WITHOUT fork")
+
+        runCommand(
+            listOf(
+                "docker", "compose",
+                "-f", composeFile.absolutePath,
+                "up", "-d", "--force-recreate"
+            ),
+            env
+        )
+    }
 
     // ---------------------------------------------------
     // Command executor
