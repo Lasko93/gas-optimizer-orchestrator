@@ -12,7 +12,7 @@ services:
       - --fork-url
       - https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}
       - --fork-block-number
-      - "23924321"
+      - "${ANVIL_FORK_BLOCK:-23924320}"
       - --chain-id
       - "1"
       - --code-size-limit
@@ -20,15 +20,6 @@ services:
       - --auto-impersonate
     ports:
       - "8545:8545"
-    networks: [opimizernet]
-  compiler:
-    image: trailofbits/eth-security-toolbox:nightly
-    container_name: compiler
-    working_dir: /share
-    entrypoint: /bin/bash
-    command: -lc "tail -f /dev/null"
-    volumes:
-      - ./gas-optimizer-orchestrator/src/main/kotlin/de/orchestrator/gas_optimizer_orchestrator/externalContracts:/share
     networks: [opimizernet]
 
 networks:
