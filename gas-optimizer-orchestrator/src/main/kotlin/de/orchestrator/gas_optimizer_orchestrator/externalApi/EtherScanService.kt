@@ -1,8 +1,18 @@
 package de.orchestrator.gas_optimizer_orchestrator.externalApi
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import de.orchestrator.gas_optimizer_orchestrator.exceptions.EtherScanException
+import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.EtherscanTransaction
+import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper
+import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.ensureOk
+import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.extractMethodSelector
+import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.looksLikeStandardJson
+import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.normalizeAddress
+import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.normalizeEtherscanSourceField
+import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.optionalText
+import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.requireNonEmptyResultArray
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
@@ -22,7 +32,8 @@ class EtherScanService(
     /* ============================================================
     * 0) GET SOURCE CODE FOR ADRESS
     * ============================================================ */
-    fun getContractSourceCode(address: String, chainId: String = "1"): String {
+    fun getContractSourceCode(address: String, chainId: String = "1"): ContractSourceCodeResult {
+        val trimmedAddress = address.trim()
 
         val rawJson = client.get()
             .uri { b ->
@@ -30,7 +41,7 @@ class EtherScanService(
                     .queryParam("chainid", chainId)
                     .queryParam("module", "contract")
                     .queryParam("action", "getsourcecode")
-                    .queryParam("address", address.trim())
+                    .queryParam("address", trimmedAddress)
                     .build()
             }
             .retrieve()
@@ -38,18 +49,10 @@ class EtherScanService(
             ?: throw IllegalStateException("Null response from Etherscan")
 
         val root = mapper.readTree(rawJson)
-        val status = root["status"]?.asText() ?: "0"
-        val result = root["result"]
 
-        if (status != "1" || result == null || !result.isArray || result.size() == 0) {
-            throw EtherScanException(status, root["message"]?.asText() ?: "Failed to fetch source code")
-        }
+        ensureOk(root, "getsourcecode")
+        val entry = requireNonEmptyResultArray(root, "getsourcecode")[0]
 
-        val entry = result[0]
-
-        // ============================================================
-        // 1. Proxy detection → follow implementation
-        // ============================================================
         val isProxy = entry["Proxy"]?.asText() == "1"
         val impl = entry["Implementation"]?.asText()
 
@@ -58,15 +61,24 @@ class EtherScanService(
             return getContractSourceCode(impl, chainId)
         }
 
-        // ============================================================
-        // 2. Extract Solidity source
-        // ============================================================
-        val sourceCode = entry["SourceCode"]?.asText() ?: ""
-
-        if (sourceCode.isBlank()) {
+        val rawSourceField = optionalText(entry, "SourceCode")
+        if (rawSourceField.isBlank()) {
             throw EtherScanException("0", "Contract has no verified source code on Etherscan")
         }
-        return sourceCode
+
+        val normalizedSource = normalizeEtherscanSourceField(rawSourceField)
+
+        return ContractSourceCodeResult(
+            address = trimmedAddress,
+            contractName = optionalText(entry, "ContractName"),
+            compilerVersion = optionalText(entry, "CompilerVersion"),
+            optimizationUsed = entry["OptimizationUsed"]?.asText() == "1",
+            runs = entry["Runs"]?.asInt() ?: 0,
+            evmVersion = entry["EVMVersion"]?.asText(),
+            sourceCode = normalizedSource,
+            isStandardJsonInput = looksLikeStandardJson(normalizedSource),
+            constructorArgumentsHex = optionalText(entry, "ConstructorArguments")
+        )
     }
 
     /* ============================================================
@@ -82,13 +94,15 @@ class EtherScanService(
         sort: String = "asc"
     ): List<EtherscanTransaction> {
 
+        val trimmedAddress = normalizeAddress(address)
+
         val rawJson = client.get()
             .uri { b ->
                 b.queryParam("apikey", apiKey)
                     .queryParam("chainid", chainId)
                     .queryParam("module", "account")
                     .queryParam("action", "txlist")
-                    .queryParam("address", address)
+                    .queryParam("address", trimmedAddress)
                     .queryParam("startblock", startBlock)
                     .queryParam("endblock", endBlock)
                     .queryParam("page", page)
@@ -101,23 +115,13 @@ class EtherScanService(
             ?: throw IllegalStateException("Null response from Etherscan")
 
         val root = mapper.readTree(rawJson)
-        val status = root["status"]?.asText() ?: "0"
-
-        if (status != "1") {
-            throw EtherScanException(
-                status,
-                root["message"]?.asText() ?: "Etherscan error"
-            )
-        }
-
-        val arr = root["result"]
-        if (arr == null || !arr.isArray) {
-            throw IllegalStateException("Unexpected Etherscan result: $rawJson")
-        }
+        ensureOk(root, "txlist")
+        val arr = EtherScanHelper.requireResultArray(root, "txlist")
 
         // Parse JSON → Kotlin objects
-
-        val allTx = mapper.readerForListOf(EtherscanTransaction::class.java).readValue<List<EtherscanTransaction>>(arr)
+        val allTx = mapper
+            .readerForListOf(EtherscanTransaction::class.java)
+            .readValue<List<EtherscanTransaction>>(arr)
 
         // -------------------------------------------------------
         // FILTER: Only one transaction per unique method selector
@@ -125,13 +129,8 @@ class EtherScanService(
         val seen = mutableSetOf<String>()
 
         return allTx.filter { tx ->
-            // ignore empty calldata
-            if (tx.input.isNullOrBlank() || tx.input == "0x") return@filter false
-
-            // extract method selector: first 10 chars (“0x + 8 hex")
-            val selector = tx.input.take(10)
-
-            // return only first occurrence per selector
+            val selector = extractMethodSelector(tx.input) ?: return@filter false
+            // only true for first occurrence of selector
             seen.add(selector)
         }
     }
@@ -140,13 +139,15 @@ class EtherScanService(
      * 2) GET ABI OF CONTRACT (V2)
      * ============================================================ */
     fun getContractAbi(address: String, chainId: String = "1"): String {
+        val trimmedAddress = normalizeAddress(address)
+
         val rawJson = client.get()
             .uri { b ->
                 b.queryParam("apikey", apiKey)
                     .queryParam("chainid", chainId)
                     .queryParam("module", "contract")
                     .queryParam("action", "getabi")
-                    .queryParam("address", address.trim())
+                    .queryParam("address", trimmedAddress)
                     .build()
             }
             .retrieve()
@@ -154,12 +155,9 @@ class EtherScanService(
             ?: throw IllegalStateException("Null response from Etherscan")
 
         val root = mapper.readTree(rawJson)
-        val status = root["status"]?.asText() ?: "0"
-        if (status != "1") {
-            throw EtherScanException(status, root["message"]?.asText() ?: "Failed to fetch ABI")
-        }
+        ensureOk(root, "getabi")
 
-        val resultString = root["result"].asText()
+        val resultString = root["result"]?.asText().orEmpty()
 
         if (resultString == "Contract source code not verified") {
             throw EtherScanException("0", "Contract not verified on Etherscan")
@@ -167,60 +165,5 @@ class EtherScanService(
 
         // Return ABI text directly
         return resultString
-    }
-
-    /* ============================================================
-     * 3) GET BYTECODE OF CONTRACT (V2)
-     * ============================================================ */
-    fun getContractBytecode(address: String, chainId: String = "1"): String {
-
-        val rawJson = client.get()
-            .uri { b ->
-                b.queryParam("apikey", apiKey)
-                    .queryParam("chainid", chainId)
-                    .queryParam("module", "contract")
-                    .queryParam("action", "getsourcecode")
-                    .queryParam("address", address)
-                    .build()
-            }
-            .retrieve()
-            .body(String::class.java)
-            ?: throw IllegalStateException("Null response from Etherscan")
-
-        val root = mapper.readTree(rawJson)
-        val status = root["status"]?.asText() ?: "0"
-
-        val result = root["result"]
-        val entry = result?.get(0)
-
-        // ------------------------------------------------
-        // 1. Proxy detection (V2 standard)
-        // ------------------------------------------------
-        if (entry != null) {
-            val isProxy = entry["Proxy"]?.asText() == "1"
-            val impl = entry["Implementation"]?.asText()
-            if (isProxy && !impl.isNullOrBlank()) {
-                println("Proxy detected → following implementation $impl")
-                return getContractBytecode(impl, chainId)
-            }
-        }
-
-        // ------------------------------------------------
-        // 2. Etherscan says: NOT VERIFIED or empty bytecode
-        // ------------------------------------------------
-        val bytecode = entry?.get("Bytecode")?.asText() ?: ""
-        if (bytecode.isBlank() || bytecode == "0x") {
-            println("Etherscan has no verified bytecode → falling back to eth_getCode()...")
-
-            val rpcBytecode = alchemyService.getBytecode(address)
-
-            if (rpcBytecode == "0x" || rpcBytecode.isBlank()) {
-                throw EtherScanException("0", "Bytecode missing and rpc fallback returned empty code")
-            }
-
-            return rpcBytecode
-        }
-
-        return if (bytecode.startsWith("0x")) bytecode else "0x$bytecode"
     }
 }
