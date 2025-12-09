@@ -48,6 +48,48 @@ class DockerComposeAnvilManager(
     }
 
     /**
+     * Replace the runtime bytecode of a contract at the given address using Anvil's anvil_setCode.
+     *
+     * @param address  The target contract address (0x-prefixed).
+     * @param optimizedRuntimeBytecode  MUST start with "0x". This is the optimized runtime bytecode.
+     */
+    fun replaceRuntimeBytecode(
+        address: String,
+        runtimeBytecode: String
+    ) {
+        require(address.startsWith("0x")) { "Address must start with 0x" }
+        require(runtimeBytecode.startsWith("0x")) { "Runtime bytecode must start with 0x" }
+
+        val payload = """
+        {
+            "jsonrpc":"2.0",
+            "id":1,
+            "method":"anvil_setCode",
+            "params":["$address","$runtimeBytecode"]
+        }
+    """.trimIndent()
+
+        val url = java.net.URL(rpcUrl)
+        val connection = url.openConnection() as java.net.HttpURLConnection
+        connection.requestMethod = "POST"
+        connection.doOutput = true
+        connection.setRequestProperty("Content-Type", "application/json")
+
+        connection.outputStream.use { os ->
+            os.write(payload.toByteArray(Charsets.UTF_8))
+        }
+
+        val responseCode = connection.responseCode
+        val response = connection.inputStream.bufferedReader().readText()
+
+        if (responseCode != 200) {
+            throw IllegalStateException("Failed to replace runtime bytecode: HTTP $responseCode\n$response")
+        }
+
+        println("✔ anvil_setCode succeeded for $address")
+    }
+
+    /**
      * Start Anvil WITHOUT fork (ENABLE_FORK=false).
      */
     fun startAnvilNoFork(genesisTimestamp: String? = "0") {
