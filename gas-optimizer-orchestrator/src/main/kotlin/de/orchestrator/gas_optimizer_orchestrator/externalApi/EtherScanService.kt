@@ -166,4 +166,24 @@ class EtherScanService(
         // Return ABI text directly
         return resultString
     }
+    fun getCreationTimestampSeconds(
+        contractAddress: String,
+        chainId: String = "1"
+    ): String {
+        val txs = getTransactionsForAddress(
+            address = contractAddress,
+            chainId = chainId,
+            startBlock = 0,
+            endBlock = 9_999_999_999,
+            page = 1,
+            offset = 10_000,   // plenty to include the creation tx
+            sort = "asc"
+        )
+
+        val creationTx = txs.minByOrNull { it.blockNumber }
+            ?: throw IllegalStateException("No transactions found for $contractAddress – cannot infer creation timestamp")
+
+        // if your timeStamp is a String/BigInteger, adapt this line:
+        return creationTx.timeStamp
+    }
 }

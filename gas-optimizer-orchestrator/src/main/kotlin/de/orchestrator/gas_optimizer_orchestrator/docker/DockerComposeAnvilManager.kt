@@ -50,7 +50,7 @@ class DockerComposeAnvilManager(
     /**
      * Start Anvil WITHOUT fork (ENABLE_FORK=false).
      */
-    fun startAnvilNoFork(genesisTimestamp: Long? = 0) {
+    fun startAnvilNoFork(genesisTimestamp: String? = "0") {
         val env = mutableMapOf(
             "ENABLE_FORK" to "false",
             "ALCHEMY_API_KEY" to "",
