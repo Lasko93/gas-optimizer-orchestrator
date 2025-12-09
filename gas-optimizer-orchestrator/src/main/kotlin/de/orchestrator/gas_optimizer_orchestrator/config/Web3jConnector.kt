@@ -50,7 +50,7 @@ class Web3Config(
                 println("No private key configured (read-only mode).")
             }
         } catch (e: Exception) {
-            System.err.println("Failed to connect to Ganache node at ${props.httpUrl}: ${e.message}")
+            System.err.println("Failed to connect to Anvil node at ${props.httpUrl}: ${e.message}")
         }
     }
 }
