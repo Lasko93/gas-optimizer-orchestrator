@@ -108,7 +108,7 @@ class AnvilInteractionService(
             val resp = web3j.ethGetTransactionReceipt(hash).send()
             receiptOpt = resp.transactionReceipt
             if (receiptOpt.isPresent) return receiptOpt.get()
-            Thread.sleep(300)
+            Thread.sleep(500)
         }
     }
 }
