@@ -24,7 +24,16 @@ services:
       ALCHEMY_API_KEY: "${ALCHEMY_API_KEY:-}"
       ANVIL_FORK_BLOCK: "${ANVIL_FORK_BLOCK:-0}"
     networks: [opimizernet]
-
+  compiler:
+    image: trailofbits/eth-security-toolbox:nightly
+    container_name: compiler
+    working_dir: /share
+    entrypoint: /bin/bash
+    command: -lc "tail -f /dev/null"
+    user: "0:0"
+    volumes:
+      - ./gas-optimizer-orchestrator/src/main/kotlin/de/orchestrator/gas_optimizer_orchestrator/externalContracts:/share
+    networks: [opimizernet]
 networks:
   opimizernet:
     driver: bridge

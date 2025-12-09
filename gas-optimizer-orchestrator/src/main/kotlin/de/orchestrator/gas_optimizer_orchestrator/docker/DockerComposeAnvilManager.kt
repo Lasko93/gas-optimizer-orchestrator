@@ -39,7 +39,8 @@ class DockerComposeAnvilManager(
             listOf(
                 "docker", "compose",
                 "-f", composeFile.absolutePath,
-                "up", "-d", "--force-recreate"
+                "up", "-d", "--force-recreate",
+                "anvil"
             ),
             env
         )
@@ -61,7 +62,8 @@ class DockerComposeAnvilManager(
             listOf(
                 "docker", "compose",
                 "-f", composeFile.absolutePath,
-                "up", "-d", "--force-recreate"
+                "up", "-d", "--force-recreate",
+                "anvil"
             ),
             env
         )
