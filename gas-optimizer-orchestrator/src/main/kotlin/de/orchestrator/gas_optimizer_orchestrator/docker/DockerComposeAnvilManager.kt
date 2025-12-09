@@ -50,14 +50,15 @@ class DockerComposeAnvilManager(
     /**
      * Start Anvil WITHOUT fork (ENABLE_FORK=false).
      */
-    fun startAnvilNoFork() {
-        val env = mapOf(
+    fun startAnvilNoFork(genesisTimestamp: Long? = 0) {
+        val env = mutableMapOf(
             "ENABLE_FORK" to "false",
             "ALCHEMY_API_KEY" to "",
-            "ANVIL_FORK_BLOCK" to "0"
+            "ANVIL_FORK_BLOCK" to "0",
+            "ANVIL_TIMESTAMP" to genesisTimestamp.toString(),
         )
 
-        println("Starting Anvil WITHOUT fork")
+        println("Starting Anvil WITHOUT fork (timestamp=${genesisTimestamp ?: "default"})")
 
         runCommand(
             listOf(

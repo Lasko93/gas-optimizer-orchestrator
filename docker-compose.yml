@@ -14,6 +14,7 @@ services:
         else
           echo "🔧 Starting ANVIL WITHOUT fork...";
           anvil --host 0.0.0.0 --port 8545 \
+                --timestamp "$ANVIL_TIMESTAMP" \
                 --auto-impersonate --chain-id 1 --code-size-limit 4294967295;
         fi
       '
@@ -23,6 +24,8 @@ services:
       ENABLE_FORK: "${ENABLE_FORK:-false}"
       ALCHEMY_API_KEY: "${ALCHEMY_API_KEY:-}"
       ANVIL_FORK_BLOCK: "${ANVIL_FORK_BLOCK:-0}"
+      ANVIL_TIMESTAMP: "${ANVIL_TIMESTAMP:-0}"
+
     networks: [opimizernet]
   compiler:
     image: trailofbits/eth-security-toolbox:nightly
