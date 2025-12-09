@@ -6,6 +6,7 @@ import java.io.File
 @Service
 class DockerComposeAnvilManager(
 ) {
+    val rpcUrl = "http://localhost:8545"
 
     private val composeFile = File("docker-compose.yml")
 
@@ -14,7 +15,7 @@ class DockerComposeAnvilManager(
         fn: () -> T
     ): T {
         startAnvilFork(blockNumber)
-        val rpcUrl = "http://localhost:8545"
+
 
         waitForRpc(rpcUrl)
 
@@ -67,6 +68,7 @@ class DockerComposeAnvilManager(
             ),
             env
         )
+        waitForRpc(rpcUrl)
     }
 
     // ---------------------------------------------------
