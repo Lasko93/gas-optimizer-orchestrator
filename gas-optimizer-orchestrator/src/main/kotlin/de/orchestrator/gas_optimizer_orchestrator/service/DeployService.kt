@@ -116,47 +116,4 @@ class DeployService(
     private fun normalizeHex(raw: String): String =
         if (raw.startsWith("0x")) raw else "0x$raw"
 
-    /**
-     * Wrap a runtime bytecode blob into a generic constructor that just
-     * copies it into memory and returns it as the contract code.
-     *
-     * Input:  runtime like "0x60806040..."
-     * Output: creation code like "0x61....61....60003961....6000f3<runtime>"
-     */
-    private fun wrapRuntimeAsCreation(runtimeBytecode: String): String {
-        val runtime = runtimeBytecode.removePrefix("0x")
-        require(runtime.length % 2 == 0) { "Runtime hex length must be even" }
-
-        val lenBytes = runtime.length / 2
-        require(lenBytes <= 0xFFFF) {
-            "Runtime too large ($lenBytes bytes) – exceeds PUSH2 range"
-        }
-
-        val lenHex = lenBytes.toString(16).padStart(4, '0')  // 2 bytes
-        val offsetHex = "000f"                               // stub is 15 bytes
-
-        val creationWithoutPrefix =
-            "61$lenHex" +      // PUSH2 len
-                    "61$offsetHex" +   // PUSH2 offset (15)
-                    "6000" +           // PUSH1 0
-                    "39" +             // CODECOPY
-                    "61$lenHex" +      // PUSH2 len
-                    "6000" +           // PUSH1 0
-                    "f3" +             // RETURN
-                    runtime            // runtime code
-
-        return "0x$creationWithoutPrefix"
-    }
-
-    /**
-     * Deploys a runtime-optimized bytecode (e.g. from bytepeep).
-     */
-    fun deployOptimizedRuntime(runtimeBytecode: String): TransactionReceipt {
-        val normalizedRuntime = normalizeHex(runtimeBytecode)
-        val creation = wrapRuntimeAsCreation(normalizedRuntime)
-
-        println("Deploying optimized runtime via stub (creation size=${(creation.length - 2) / 2} bytes)")
-        return deployRawBytecode(creation)
-    }
-
 }
