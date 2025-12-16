@@ -2,6 +2,7 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
+import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil.validateBytecode
 import org.springframework.stereotype.Service
 import org.web3j.crypto.Credentials
@@ -33,11 +34,16 @@ class AnvilInteractionService(
      *  - Etherscan V2 bytecode
      *  - RPC bytecode (eth_getCode)
      */
-    fun deployRawBytecode(bytecode: String): TransactionReceipt {
+    fun deployRawBytecode(bytecode: String,constructorArgsHex:String): TransactionReceipt {
         anvilManager.startAnvilNoFork()
         validateBytecode(bytecode)
 
-        val receipt = deployContract(bytecode = bytecode, value = BigInteger.ZERO)
+        val deployBytecode = BytecodeUtil.appendConstructorArgs(
+            bytecode = bytecode,
+            constructorArgsHex = constructorArgsHex
+        )
+
+        val receipt = deployContract(bytecode = deployBytecode, value = BigInteger.ZERO)
 
         val contractAddress = receipt.contractAddress
             ?: throw IllegalStateException("Anvil did not return a contract address")

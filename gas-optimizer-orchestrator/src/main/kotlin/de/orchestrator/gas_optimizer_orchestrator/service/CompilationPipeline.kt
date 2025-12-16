@@ -31,7 +31,8 @@ class CompilationPipeline(
 
         val exportDir = compilerManager.compileWithCryticTruffle(
             exportDirName = exportDirName,
-            cleanExportDir = true
+            cleanExportDir = true,
+            solcVersion = srcMeta.compilerVersion
         )
 
         val artifactFile = File(exportDir, "${srcMeta.contractName}.json")
@@ -68,7 +69,8 @@ class CompilationPipeline(
         val combinedJsonFiles: List<File> = compilerManager.compileViaIrRunsCombinedJson(
             solFileName = srcMeta.contractName+".sol",
             runsList = runsList,
-            outDirName = outDirName
+            outDirName = outDirName,
+            solcVersion = srcMeta.compilerVersion
         )
 
         return runsList.zip(combinedJsonFiles).map { (runs, file) ->

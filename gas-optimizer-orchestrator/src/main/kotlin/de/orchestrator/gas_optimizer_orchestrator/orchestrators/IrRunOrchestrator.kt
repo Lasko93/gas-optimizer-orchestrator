@@ -57,7 +57,7 @@ class IrRunOrchestrator(
 
         // 3) Execute each IR run
         return compiledRuns.associate { run ->
-            val deploymentGasUsed = measureDeploymentGas(run, srcMeta)
+            val deploymentGasUsed = deployService.deployRawBytecode(run.creationBytecode,srcMeta.constructorArgumentsHex).gasUsed?.toLong() ?: 0L
 
             val functionCalls = interactions.map { interaction ->
                 val sig = signature(interaction.functionName, interaction.abiTypes)
@@ -89,17 +89,5 @@ class IrRunOrchestrator(
                 )
             )
         }
-    }
-
-    private fun measureDeploymentGas(run: CompiledIrRun, srcMeta: ContractSourceCodeResult): Long {
-        anvilManager.startAnvilNoFork()
-
-        val deployBytecode = BytecodeUtil.appendConstructorArgs(
-            bytecode = run.creationBytecode,
-            constructorArgsHex = srcMeta.constructorArgumentsHex
-        )
-
-        val receipt = deployService.deployRawBytecode(deployBytecode)
-        return receipt.gasUsed?.toLong() ?: 0L
     }
 }
