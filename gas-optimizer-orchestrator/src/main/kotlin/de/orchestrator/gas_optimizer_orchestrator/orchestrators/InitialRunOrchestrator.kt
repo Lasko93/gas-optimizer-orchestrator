@@ -1,5 +1,6 @@
 package de.orchestrator.gas_optimizer_orchestrator.orchestrators
 
+import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
 import de.orchestrator.gas_optimizer_orchestrator.model.CompilerInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.EtherscanTransaction
@@ -21,11 +22,10 @@ class InitialRunOrchestrator(
     private val compilationPipeline: CompilationPipeline,
     private val deployService: DeployService,
     private val interactionCreationService: InteractionCreationService,
-    private val forkReplayService: ForkReplayService
+    private val forkReplayService: ForkReplayService,
+    private val paths: GasOptimizerPathsProperties
 ) {
 
-    private val externalContractsDir: Path =
-        Path.of("gas-optimizer-orchestrator/src/main/kotlin/de/orchestrator/gas_optimizer_orchestrator/externalContracts")
 
     fun runInitial(
         transactions: List<EtherscanTransaction>,
@@ -36,7 +36,7 @@ class InitialRunOrchestrator(
         // 1) Compile + get deploy bytecode
         val compiled = compilationPipeline.compileToTruffleAndGetDeployBytecode(
             srcMeta = srcMeta,
-            externalContractsDir = externalContractsDir
+            externalContractsDir = paths.externalContractsDir
         )
 
         // 2) Measure deployment gas on no-fork (not used for replay)

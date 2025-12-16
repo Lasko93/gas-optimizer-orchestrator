@@ -1,17 +1,17 @@
 package de.orchestrator.gas_optimizer_orchestrator.docker
 
+import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
 import org.springframework.stereotype.Service
 import java.io.File
 
 @Service
 class DockerComposeCompilerManager(
-    private val docker: DockerHelper
+    private val docker: DockerHelper,
+    private val paths: GasOptimizerPathsProperties
 ) {
     private val serviceName = "compiler"
 
-    private val hostShareDir = File(
-        "gas-optimizer-orchestrator/src/main/kotlin/de/orchestrator/gas_optimizer_orchestrator/externalContracts"
-    )
+    private val hostShareDir = paths.externalContractsDir.toFile()
 
     fun compileViaIrRunsCombinedJson(
         solFileName: String = "",
@@ -19,7 +19,7 @@ class DockerComposeCompilerManager(
         outDirName: String = "out"
     ): List<File> {
 
-        require(hostShareDir.exists()) { "Host share dir does not exist: ${hostShareDir.absolutePath}" }
+        require(hostShareDir.exists()) { "Host share dir does not exist: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
 
         val hostSol = File(hostShareDir, solFileName)
         require(hostSol.exists()) { "Solidity file not found: ${hostSol.absolutePath}" }
@@ -51,8 +51,8 @@ class DockerComposeCompilerManager(
         exportDirName: String = "crytic-export",
         cleanExportDir: Boolean = true
     ): File {
-        require(hostShareDir.exists()) { "Host share dir does not exist: ${hostShareDir.absolutePath}" }
-        require(hostShareDir.isDirectory) { "Host share dir is not a directory: ${hostShareDir.absolutePath}" }
+        require(hostShareDir.exists()) { "Host share dir does not exist: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
+        require(hostShareDir.isDirectory) { "Host share dir is not a directory: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
 
         val hostExportDir = File(hostShareDir, exportDirName)
 
@@ -78,8 +78,8 @@ class DockerComposeCompilerManager(
      * but keeps the externalContracts folder itself.
      */
     fun cleanExternalContractsDir() {
-        require(hostShareDir.exists()) { "Host share dir does not exist: ${hostShareDir.absolutePath}" }
-        require(hostShareDir.isDirectory) { "Host share dir is not a directory: ${hostShareDir.absolutePath}" }
+        require(hostShareDir.exists()) { "Host share dir does not exist: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
+        require(hostShareDir.isDirectory) { "Host share dir is not a directory: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
 
         val children = hostShareDir.listFiles().orEmpty()
         children.forEach { it.deleteRecursively() }
