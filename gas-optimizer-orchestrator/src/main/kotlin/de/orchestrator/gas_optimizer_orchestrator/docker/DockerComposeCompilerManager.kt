@@ -14,33 +14,36 @@ class DockerComposeCompilerManager(
     private val hostShareDir = paths.externalContractsDir.toFile()
 
     fun compileViaIrRunsCombinedJson(
-        solFileName: String = "",
+        solFileName: String,
         runsList: List<Int> = listOf(1, 200, 10_000),
         outDirName: String = "out"
     ): List<File> {
 
-        require(hostShareDir.exists()) { "Host share dir does not exist: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
+        require(hostShareDir.exists()) {
+            "Host share dir does not exist: ${hostShareDir.absolutePath}"
+        }
 
         val hostSol = File(hostShareDir, solFileName)
         require(hostSol.exists()) { "Solidity file not found: ${hostSol.absolutePath}" }
 
         val hostOutDir = File(hostShareDir, outDirName).apply { mkdirs() }
 
-        val runs = runsList.joinToString(" ") { it.toString() }
+        val runsTokens = runsList.joinToString(" ") { it.toString() }
+
         val script = """
-            set -euo pipefail
-            mkdir -p "/share/$outDirName"
-            for runs in $runs; do
-              solc \
-                --via-ir \
-                --optimize --optimize-runs "$runs" \
-                --combined-json bin,bin-runtime \
-                --pretty-json \
-                --base-path /share --allow-paths /share \
-                "/share/$solFileName" \
-                > "/share/$outDirName/viair_runs$runs.json"
-            done
-        """.trimIndent()
+        set -euo pipefail
+        mkdir -p "/share/$outDirName"
+        for r in $runsTokens; do
+          solc \
+            --via-ir \
+            --optimize --optimize-runs "${'$'}r" \
+            --combined-json bin,bin-runtime \
+            --pretty-json \
+            --base-path /share --allow-paths /share \
+            "/share/$solFileName" \
+            > "/share/$outDirName/viair_runs${'$'}r.json"
+        done
+    """.trimIndent()
 
         docker.dockerComposeExecBash(serviceName, script, tty = false)
 

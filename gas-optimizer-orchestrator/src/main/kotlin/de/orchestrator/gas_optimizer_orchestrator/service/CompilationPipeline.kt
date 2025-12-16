@@ -3,8 +3,10 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeCompilerManager
 import de.orchestrator.gas_optimizer_orchestrator.model.CompiledContract
+import de.orchestrator.gas_optimizer_orchestrator.model.CompiledIrRun
 import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
+import de.orchestrator.gas_optimizer_orchestrator.utils.CombinedJsonHelper
 import de.orchestrator.gas_optimizer_orchestrator.utils.JsonHelper
 import org.springframework.stereotype.Service
 import java.io.File
@@ -52,4 +54,38 @@ class CompilationPipeline(
             deployBytecode = deployBytecode
         )
     }
+    fun compileViaIrRuns(
+        srcMeta: ContractSourceCodeResult,
+        externalContractsDir: Path,
+        runsList: List<Int> = listOf(1, 200, 10_000),
+        outDirName: String = "out",
+    ): List<CompiledIrRun> {
+
+        compilerManager.cleanExternalContractsDir()
+        sourceCodeParserService.createSourceCodeArtifact(srcMeta, externalContractsDir)
+
+
+        val combinedJsonFiles: List<File> = compilerManager.compileViaIrRunsCombinedJson(
+            solFileName = srcMeta.contractName+".sol",
+            runsList = runsList,
+            outDirName = outDirName
+        )
+
+        return runsList.zip(combinedJsonFiles).map { (runs, file) ->
+            val (creation, runtime, solcVersion) = CombinedJsonHelper.extractCreationAndRuntime(
+                objectMapper = objectMapper,
+                combinedJsonFile = file,
+                contractName = srcMeta.contractName
+            )
+
+            CompiledIrRun(
+                optimizeRuns = runs,
+                combinedJsonFile = file,
+                creationBytecode = creation,
+                runtimeBytecode = runtime,
+                solcVersion = solcVersion
+            )
+        }
+    }
 }
+
