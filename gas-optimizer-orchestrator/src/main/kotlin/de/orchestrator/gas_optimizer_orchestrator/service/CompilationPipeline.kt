@@ -43,15 +43,10 @@ class CompilationPipeline(
             contractName = srcMeta.contractName
         )
 
-        val deployBytecode = BytecodeUtil.appendConstructorArgs(
-            bytecode = creation,
-            constructorArgsHex = srcMeta.constructorArgumentsHex
-        )
-
         return CompiledContract(
             artifactFile = combinedJson,
             creationBytecode = creation,
-            deployBytecode = deployBytecode
+            deployBytecode = runtime
         )
     }
 

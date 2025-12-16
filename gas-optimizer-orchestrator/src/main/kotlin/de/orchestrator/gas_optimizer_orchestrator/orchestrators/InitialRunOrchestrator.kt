@@ -40,7 +40,7 @@ class InitialRunOrchestrator(
         )
 
         // 2) Measure deployment gas on no-fork (not used for replay)
-        val deployReceipt = anvilService.deployRawBytecode(compiled.deployBytecode, srcMeta.constructorArgumentsHex)
+        val deployReceipt = anvilService.deployRawBytecode(compiled.creationBytecode, srcMeta.constructorArgumentsHex)
         val deploymentGasUsed = deployReceipt.gasUsed?.toLong() ?: 0L
 
         // 3) Build interactions against TARGET address (forked contract)
