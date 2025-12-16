@@ -14,6 +14,9 @@ class DockerComposeCompilerManager(
 
     private val hostShareDir = paths.externalContractsDir.toFile()
 
+
+    //ToDo: Not every solc version has the same args --> Implement parser
+    //ToDo: Install dependencies before running solc
     fun compileViaIrRunsCombinedJson(
         solFileName: String,
         solcVersion: String,

@@ -60,25 +60,27 @@ class DockerHelper(
     // Command executor
     // ----------------------------
 
-    fun runCommand(
-        command: List<String>,
-        environment: Map<String, String> = emptyMap()
-    ) {
+    fun runCommand(command: List<String>, environment: Map<String, String> = emptyMap()) {
         val workDir = composeFile.absoluteFile.parentFile ?: File(".")
-
         val pb = ProcessBuilder(command)
             .directory(workDir)
             .redirectErrorStream(true)
 
-        val env = pb.environment()
-        environment.forEach { (k, v) -> env[k] = v }
+        pb.environment().putAll(environment)
 
         val process = pb.start()
-        process.inputStream.bufferedReader().forEachLine { println(it) }
+
+        val out = StringBuilder()
+        process.inputStream.bufferedReader().forEachLine { line ->
+            println(line)
+            out.appendLine(line)
+        }
 
         val exit = process.waitFor()
         if (exit != 0) {
-            throw IllegalStateException("Command failed: $command (exit=$exit)")
+            throw IllegalStateException(
+                "Command failed (exit=$exit): $command\n--- output ---\n$out"
+            )
         }
     }
 

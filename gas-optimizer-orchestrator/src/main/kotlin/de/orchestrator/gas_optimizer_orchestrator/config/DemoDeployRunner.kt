@@ -18,13 +18,14 @@ class DemoDeployConfig(
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        val target = "0xd3b3FD8383fFa8d9cb4eD1a17B6EE88f8706cF60"
+        val target = "0xB67971D340cf8D6efab708a0683937912a107d95"
 
         val transactions = etherScanService.getTransactionsForAddress(target)
         val abiJson = etherScanService.getContractAbi(target)
         val srcMeta = etherScanService.getContractSourceCode(target, chainId = "1")
 
 
+        // initial deploycode is sus
         val result = initialRunOrchestrator.runInitial(
             transactions = transactions,
             srcMeta = srcMeta,
