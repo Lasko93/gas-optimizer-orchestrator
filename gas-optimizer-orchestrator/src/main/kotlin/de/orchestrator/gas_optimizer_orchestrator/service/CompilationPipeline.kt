@@ -20,42 +20,6 @@ class CompilationPipeline(
 ) {
 
 
-    fun compileToTruffleAndGetDeployBytecode(
-        srcMeta: ContractSourceCodeResult,
-        externalContractsDir: Path,
-        exportDirName: String = "crytic-export"
-    ): CompiledContract {
-
-        compilerManager.cleanExternalContractsDir()
-        sourceCodeParserService.createSourceCodeArtifact(srcMeta, externalContractsDir)
-
-        val exportDir = compilerManager.compileWithCryticTruffle(
-            exportDirName = exportDirName,
-            cleanExportDir = true,
-            solcVersion = srcMeta.compilerVersion
-        )
-
-        val artifactFile = File(exportDir, "${srcMeta.contractName}.json")
-        require(artifactFile.exists()) { "Truffle artifact not found: ${artifactFile.absolutePath}" }
-
-        val creationBytecode = JsonHelper.extractBytecode(
-            objectMapper = objectMapper,
-            truffleArtifact = artifactFile,
-            fieldName = "bytecode"
-        )
-
-        val deployBytecode = BytecodeUtil.appendConstructorArgs(
-            bytecode = creationBytecode,
-            constructorArgsHex = srcMeta.constructorArgumentsHex
-        )
-
-        return CompiledContract(
-            artifactFile = artifactFile,
-            creationBytecode = creationBytecode,
-            deployBytecode = deployBytecode
-        )
-    }
-
     fun compileBaselineNoOptimize(
         srcMeta: ContractSourceCodeResult,
         externalContractsDir: Path,

@@ -88,34 +88,6 @@ class DockerComposeCompilerManager(
         return hostOutFile
     }
 
-    fun compileWithCryticTruffle(
-        solcVersion: String,
-        exportDirName: String = "crytic-export",
-        cleanExportDir: Boolean = true
-    ): File {
-        useSolcVersion(solcVersion)
-        require(hostShareDir.exists()) { "Host share dir does not exist: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
-        require(hostShareDir.isDirectory) { "Host share dir is not a directory: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
-
-        val hostExportDir = File(hostShareDir, exportDirName)
-
-        val script = """
-        set -euo pipefail
-        cd /share
-
-        ${if (cleanExportDir) """rm -rf "/share/$exportDirName"""" else ""}
-        mkdir -p "/share/$exportDirName"
-
-        crytic-compile . \
-          --export-format truffle \
-          --export-dir "/share/$exportDirName"
-    """.trimIndent()
-
-        docker.dockerComposeExecBash(serviceName, script, tty = false)
-
-        return hostExportDir
-    }
-
     /**
      * Deletes ALL contents of externalContracts (files + directories),
      * but keeps the externalContracts folder itself.
