@@ -11,6 +11,11 @@ object BytecodeUtil {
         return "0x$bcNo0x$argsNo0x"
     }
 
+    fun validateBytecode(bytecode: String) {
+        require(bytecode.startsWith("0x")) { "Bytecode must start with 0x" }
+        require(bytecode.length > 4) { "Bytecode too short; contract does not exist." }
+    }
+
     fun normalize0x(hex: String): String {
         val h = hex.trim()
         return if (h.startsWith("0x")) h else "0x$h"

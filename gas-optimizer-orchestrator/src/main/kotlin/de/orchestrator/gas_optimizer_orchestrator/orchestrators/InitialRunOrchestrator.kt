@@ -8,8 +8,8 @@ import de.orchestrator.gas_optimizer_orchestrator.model.FunctionGasUsed
 import de.orchestrator.gas_optimizer_orchestrator.model.GasProfile
 import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
 import de.orchestrator.gas_optimizer_orchestrator.model.RunContext
+import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
-import de.orchestrator.gas_optimizer_orchestrator.service.DeployService
 import de.orchestrator.gas_optimizer_orchestrator.service.ForkReplayService
 import de.orchestrator.gas_optimizer_orchestrator.service.InteractionCreationService
 import de.orchestrator.gas_optimizer_orchestrator.utils.ReceiptUtil
@@ -19,7 +19,7 @@ import org.springframework.stereotype.Service
 @Service
 class InitialRunOrchestrator(
     private val compilationPipeline: CompilationPipeline,
-    private val deployService: DeployService,
+    private val anvilService: AnvilInteractionService,
     private val interactionCreationService: InteractionCreationService,
     private val forkReplayService: ForkReplayService,
     private val paths: GasOptimizerPathsProperties
@@ -39,7 +39,7 @@ class InitialRunOrchestrator(
         )
 
         // 2) Measure deployment gas on no-fork (not used for replay)
-        val deployReceipt = deployService.deployRawBytecode(compiled.deployBytecode)
+        val deployReceipt = anvilService.deployRawBytecode(compiled.deployBytecode)
         val deploymentGasUsed = deployReceipt.gasUsed?.toLong() ?: 0L
 
         // 3) Build interactions against TARGET address (forked contract)

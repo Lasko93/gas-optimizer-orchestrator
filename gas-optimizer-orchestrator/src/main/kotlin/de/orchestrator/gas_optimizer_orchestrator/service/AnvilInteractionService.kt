@@ -1,6 +1,8 @@
 package de.orchestrator.gas_optimizer_orchestrator.service
 
+import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
+import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil.validateBytecode
 import org.springframework.stereotype.Service
 import org.web3j.crypto.Credentials
 import org.web3j.protocol.Web3j
@@ -8,13 +10,13 @@ import org.web3j.protocol.core.methods.request.Transaction
 import org.web3j.protocol.core.methods.response.TransactionReceipt
 import org.web3j.tx.RawTransactionManager
 import org.web3j.tx.gas.DefaultGasProvider
-import org.web3j.tx.response.PollingTransactionReceiptProcessor
 import java.math.BigInteger
 import java.util.Optional
 
 @Service
 class AnvilInteractionService(
     private val web3j: Web3j,
+    private val anvilManager: DockerComposeAnvilManager,
     credentials: Credentials,
     private val gasProvider: DefaultGasProvider
 ) {
@@ -25,10 +27,34 @@ class AnvilInteractionService(
     fun gasLimit(): BigInteger = gasProvider.gasLimit
 
     /**
+     * Deploys a raw bytecode string (0x prefixed) on a fresh non-forked Anvil.
+     *
+     * Used for:
+     *  - Etherscan V2 bytecode
+     *  - RPC bytecode (eth_getCode)
+     */
+    fun deployRawBytecode(bytecode: String): TransactionReceipt {
+        anvilManager.startAnvilNoFork()
+        validateBytecode(bytecode)
+
+        val receipt = deployContract(bytecode = bytecode, value = BigInteger.ZERO)
+
+        val contractAddress = receipt.contractAddress
+            ?: throw IllegalStateException("Anvil did not return a contract address")
+
+        println("Contract deployed at $contractAddress")
+        println("Gas used: ${receipt.gasUsed}")
+        return receipt
+    }
+
+    /**
      * RAW CONTRACT DEPLOYMENT
      * to = "" and data = bytecode
+     *
+     * Note: does NOT start/stop Anvil. Caller decides environment (fork/no-fork).
      */
     fun deployContract(bytecode: String, value: BigInteger = BigInteger.ZERO): TransactionReceipt {
+        validateBytecode(bytecode)
 
         val tx = txManager.sendTransaction(
             gasPrice(),
@@ -41,9 +67,8 @@ class AnvilInteractionService(
         return waitForReceipt(tx.transactionHash)
     }
 
-
     /**
-     * For forked mainnet: send a tx "as any address"
+     * For forked mainnet (or impersonation setups): send a tx "as any address"
      */
     fun sendRawTransaction(
         from: String,
@@ -69,46 +94,38 @@ class AnvilInteractionService(
             throw RuntimeException(send.error.message)
         }
 
-        val txHash = send.transactionHash
-        val processor = PollingTransactionReceiptProcessor(web3j, 1000L, 40)
-        return processor.waitForTransactionReceipt(txHash)
+        return waitForReceipt(send.transactionHash)
     }
 
     fun sendInteraction(interaction: ExecutableInteraction): TransactionReceipt {
-
         val encoded = interaction.encoded()
 
         val from = interaction.fromAddress
         val to = interaction.contractAddress
         val value = interaction.value
 
-        val gasLimit =
-            interaction.tx.gas.toBigIntegerOrNull() ?: gasLimit()
-
-        val gasPrice =
-            interaction.tx.gasPrice.toBigIntegerOrNull() ?: gasPrice()
+        val resolvedGasLimit = interaction.tx.gas.toBigIntegerOrNull() ?: gasLimit()
+        val resolvedGasPrice = interaction.tx.gasPrice.toBigIntegerOrNull() ?: gasPrice()
 
         return sendRawTransaction(
             from = from,
             to = to,
             value = value,
-            gasLimit = gasLimit,
-            gasPrice = gasPrice,
+            gasLimit = resolvedGasLimit,
+            gasPrice = resolvedGasPrice,
             data = encoded
         )
     }
 
     /**
-     * Helper for waiting on receipts.
+     * Helper for waiting on receipts (infinite polling, like your previous deploy loop).
      */
-    private fun waitForReceipt(hash: String): TransactionReceipt {
-        var receiptOpt: Optional<TransactionReceipt>
-
+    private fun waitForReceipt(hash: String, pollMs: Long = 500L): TransactionReceipt {
         while (true) {
             val resp = web3j.ethGetTransactionReceipt(hash).send()
-            receiptOpt = resp.transactionReceipt
+            val receiptOpt: Optional<TransactionReceipt> = resp.transactionReceipt
             if (receiptOpt.isPresent) return receiptOpt.get()
-            Thread.sleep(500)
+            Thread.sleep(pollMs)
         }
     }
 }
