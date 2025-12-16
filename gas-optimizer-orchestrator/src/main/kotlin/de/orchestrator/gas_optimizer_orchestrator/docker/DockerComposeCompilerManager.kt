@@ -1,6 +1,7 @@
 package de.orchestrator.gas_optimizer_orchestrator.docker
 
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
+import de.orchestrator.gas_optimizer_orchestrator.utils.CompilerHelper.normalizeSolcVersion
 import org.springframework.stereotype.Service
 import java.io.File
 
@@ -15,9 +16,12 @@ class DockerComposeCompilerManager(
 
     fun compileViaIrRunsCombinedJson(
         solFileName: String,
+        solcVersion: String,
         runsList: List<Int> = listOf(1, 200, 10_000),
         outDirName: String = "out"
     ): List<File> {
+
+        useSolcVersion(solcVersion)
 
         require(hostShareDir.exists()) {
             "Host share dir does not exist: ${hostShareDir.absolutePath}"
@@ -51,9 +55,11 @@ class DockerComposeCompilerManager(
     }
 
     fun compileWithCryticTruffle(
+        solcVersion: String,
         exportDirName: String = "crytic-export",
         cleanExportDir: Boolean = true
     ): File {
+        useSolcVersion(solcVersion)
         require(hostShareDir.exists()) { "Host share dir does not exist: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
         require(hostShareDir.isDirectory) { "Host share dir is not a directory: ${this@DockerComposeCompilerManager.hostShareDir.absolutePath}" }
 
@@ -94,6 +100,16 @@ class DockerComposeCompilerManager(
         }
     }
 
+    fun useSolcVersion(solcVersionRaw: String) {
+        val v = normalizeSolcVersion(solcVersionRaw)
 
+        val script = """
+        set -euo pipefail
+        solc-select use "$v" --always-install
+        solc --version
+    """.trimIndent()
+
+        docker.dockerComposeExecBash(serviceName, script, tty = false)
+    }
 
 }
