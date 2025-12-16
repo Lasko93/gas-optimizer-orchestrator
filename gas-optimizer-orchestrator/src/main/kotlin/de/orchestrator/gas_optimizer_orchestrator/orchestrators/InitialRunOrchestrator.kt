@@ -6,7 +6,7 @@ import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.EtherscanTransaction
 import de.orchestrator.gas_optimizer_orchestrator.model.FunctionGasUsed
 import de.orchestrator.gas_optimizer_orchestrator.model.GasProfile
-import de.orchestrator.gas_optimizer_orchestrator.model.InitialRunResult
+import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
 import de.orchestrator.gas_optimizer_orchestrator.model.RunContext
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
 import de.orchestrator.gas_optimizer_orchestrator.service.DeployService
@@ -15,7 +15,6 @@ import de.orchestrator.gas_optimizer_orchestrator.service.InteractionCreationSer
 import de.orchestrator.gas_optimizer_orchestrator.utils.ReceiptUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.SignatureUtil
 import org.springframework.stereotype.Service
-import java.nio.file.Path
 
 @Service
 class InitialRunOrchestrator(
@@ -31,7 +30,7 @@ class InitialRunOrchestrator(
         transactions: List<EtherscanTransaction>,
         srcMeta: ContractSourceCodeResult,
         abiJson: String
-    ): InitialRunResult {
+    ): GasTrackingResults {
 
         // 1) Compile + get deploy bytecode
         val compiled = compilationPipeline.compileToTruffleAndGetDeployBytecode(
@@ -78,7 +77,7 @@ class InitialRunOrchestrator(
             }
         }
 
-        return InitialRunResult(
+        return GasTrackingResults(
             contractName = srcMeta.contractName,
             contractAddress = srcMeta.address,
             compilerInfo = CompilerInfo(solcVersion = srcMeta.compilerVersion),

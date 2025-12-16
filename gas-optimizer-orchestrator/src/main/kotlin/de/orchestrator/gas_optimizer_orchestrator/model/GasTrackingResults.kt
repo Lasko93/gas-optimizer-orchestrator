@@ -1,6 +1,6 @@
 package de.orchestrator.gas_optimizer_orchestrator.model
 
-data class InitialRunResult(
+data class GasTrackingResults(
     val contractName: String,
     val contractAddress: String,
     val compilerInfo: CompilerInfo,
