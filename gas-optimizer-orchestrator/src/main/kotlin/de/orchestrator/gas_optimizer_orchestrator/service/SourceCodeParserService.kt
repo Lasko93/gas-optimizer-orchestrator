@@ -21,7 +21,7 @@ class SourceCodeParserService(
      *
      * @return list of all created file paths
      */
-    fun materializeSourcesForCrytic(
+    fun createSourceCodeArtifact(
         srcMeta: ContractSourceCodeResult,
         baseDir: Path
     ): List<Path> {
@@ -64,7 +64,6 @@ class SourceCodeParserService(
             val content = contentNode.asText()
 
             // Etherscan's key often matches import path (e.g. "MerkleRefund.sol" or "contracts/MyToken.sol")
-            // We recreate that structure under baseDir so solc/crytic-compile can resolve imports.
             val normalizedPath = sourcePath.replace("\\", "/")
             val target = baseDir.resolve(normalizedPath)
 
