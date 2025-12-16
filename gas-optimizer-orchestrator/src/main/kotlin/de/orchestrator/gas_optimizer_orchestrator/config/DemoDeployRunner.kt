@@ -18,7 +18,7 @@ class DemoDeployConfig(
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        val target = "0x2849bb274A0950AA27BdD291020114fbb9fd0168"
+        val target = "0xd3b3FD8383fFa8d9cb4eD1a17B6EE88f8706cF60"
 
         val transactions = etherScanService.getTransactionsForAddress(target)
         val abiJson = etherScanService.getContractAbi(target)
