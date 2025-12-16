@@ -55,6 +55,42 @@ class CompilationPipeline(
             deployBytecode = deployBytecode
         )
     }
+
+    fun compileBaselineNoOptimize(
+        srcMeta: ContractSourceCodeResult,
+        externalContractsDir: Path,
+        outDirName: String = "out",
+        outFileName: String = "baseline_noopt.json"
+    ): CompiledContract {
+
+        compilerManager.cleanExternalContractsDir()
+        sourceCodeParserService.createSourceCodeArtifact(srcMeta, externalContractsDir)
+
+        val combinedJson = compilerManager.compileSolcNoOptimizeCombinedJson(
+            solFileName = "${srcMeta.contractName}.sol",
+            solcVersion = srcMeta.compilerVersion,
+            outDirName = outDirName,
+            outFileName = outFileName
+        )
+
+        val (creation, runtime, solcVersion) = CombinedJsonHelper.extractCreationAndRuntime(
+            objectMapper = objectMapper,
+            combinedJsonFile = combinedJson,
+            contractName = srcMeta.contractName
+        )
+
+        val deployBytecode = BytecodeUtil.appendConstructorArgs(
+            bytecode = creation,
+            constructorArgsHex = srcMeta.constructorArgumentsHex
+        )
+
+        return CompiledContract(
+            artifactFile = combinedJson,
+            creationBytecode = creation,
+            deployBytecode = deployBytecode
+        )
+    }
+
     fun compileViaIrRuns(
         srcMeta: ContractSourceCodeResult,
         externalContractsDir: Path,

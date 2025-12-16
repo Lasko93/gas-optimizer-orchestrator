@@ -54,6 +54,40 @@ class DockerComposeCompilerManager(
         return runsList.map { File(hostOutDir, "viair_runs$it.json") }
     }
 
+    fun compileSolcNoOptimizeCombinedJson(
+        solFileName: String,
+        solcVersion: String,
+        outFileName: String = "baseline_noopt.json",
+        outDirName: String = "out"
+    ): File {
+
+        useSolcVersion(solcVersion)
+
+        require(hostShareDir.exists()) { "Host share dir does not exist: ${hostShareDir.absolutePath}" }
+        val hostSol = File(hostShareDir, solFileName)
+        require(hostSol.exists()) { "Solidity file not found: ${hostSol.absolutePath}" }
+
+        val hostOutDir = File(hostShareDir, outDirName).apply { mkdirs() }
+        val hostOutFile = File(hostOutDir, outFileName)
+
+        val script = """
+        set -euo pipefail
+        mkdir -p "/share/$outDirName"
+
+        # no optimizer, no via-ir
+        solc \
+          --combined-json bin,bin-runtime \
+          --pretty-json \
+          --base-path /share --allow-paths /share \
+          "/share/$solFileName" \
+          > "/share/$outDirName/$outFileName"
+    """.trimIndent()
+
+        docker.dockerComposeExecBash(serviceName, script, tty = false)
+
+        return hostOutFile
+    }
+
     fun compileWithCryticTruffle(
         solcVersion: String,
         exportDirName: String = "crytic-export",

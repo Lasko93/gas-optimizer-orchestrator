@@ -33,9 +33,10 @@ class InitialRunOrchestrator(
     ): GasTrackingResults {
 
         // 1) Compile + get deploy bytecode
-        val compiled = compilationPipeline.compileToTruffleAndGetDeployBytecode(
+        val compiled = compilationPipeline.compileBaselineNoOptimize(
             srcMeta = srcMeta,
-            externalContractsDir = paths.externalContractsDir
+            externalContractsDir = paths.externalContractsDir,
+            outFileName = srcMeta.contractName+".json"
         )
 
         // 2) Measure deployment gas on no-fork (not used for replay)
