@@ -7,7 +7,7 @@
         <processorPath useClasspath="false">
           <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.springframework.boot/spring-boot-configuration-processor/3.5.7/18e7a39068a84cd401d758162a5a23a8b8b47b22/spring-boot-configuration-processor-3.5.7.jar" />
         </processorPath>
-        <module name="gas-optimizer-orchestrator.main" />
+        <module name="de.orchestrator.gas-optimizer-orchestrator.main" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel target="21" />
