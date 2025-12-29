@@ -49,23 +49,25 @@ class CompilationPipeline(
         )
     }
 
-    fun compileViaIrRuns(
+    fun compileViaSolcOptimizer(
         srcMeta: ContractSourceCodeResult,
         externalContractsDir: Path,
         runsList: List<Int> = listOf(1, 200, 10_000),
         outDirName: String = "out",
+        viaVrRuns: Boolean = false
     ): List<CompiledIrRun> {
 
         compilerManager.cleanExternalContractsDir()
         sourceCodeParserService.createSourceCodeArtifact(srcMeta, externalContractsDir)
 
 
-        val combinedJsonFiles: List<File> = compilerManager.compileViaIrRunsCombinedJson(
+        val combinedJsonFiles: List<File> = compilerManager.compileViaSolcOptimizer(
             solFileName = srcMeta.contractName+".sol",
             runsList = runsList,
             outDirName = outDirName,
             solcVersion = srcMeta.compilerVersion,
             remappings = srcMeta.remappings,
+            viaIrRuns = viaVrRuns
         )
 
         return runsList.zip(combinedJsonFiles).map { (runs, file) ->

@@ -13,7 +13,7 @@ import de.orchestrator.gas_optimizer_orchestrator.utils.SignatureUtil.signature
 import org.springframework.stereotype.Service
 
 @Service
-class IrRunOrchestrator(
+class SolcOptimizerOrchestrator(
     private val compilationPipeline: CompilationPipeline,
     private val anvilManager: DockerComposeAnvilManager,
     private val deployService: AnvilInteractionService,
@@ -30,20 +30,22 @@ class IrRunOrchestrator(
      *
      * @return Map<optimizeRuns, GasTrackingResults>
      */
-    fun runIrRuns(
+    fun runSolcOptimizerRuns(
         transactions: List<EtherscanTransaction>,
         srcMeta: ContractSourceCodeResult,
         abiJson: String,
         runsList: List<Int> = listOf(1, 200, 10_000),
-        outDirName: String = "out"
+        outDirName: String = "out",
+        viaIrRuns: Boolean = false
     ): Map<Int, GasTrackingResults> {
 
         // 1) Compile all IR variants
-        val compiledRuns: List<CompiledIrRun> = compilationPipeline.compileViaIrRuns(
+        val compiledRuns: List<CompiledIrRun> = compilationPipeline.compileViaSolcOptimizer(
             srcMeta = srcMeta,
             externalContractsDir = paths.externalContractsDir,
             runsList = runsList,
-            outDirName = outDirName
+            outDirName = outDirName,
+            viaVrRuns = viaIrRuns
         )
 
         // 2) Build interactions once (always target the forked mainnet address)
