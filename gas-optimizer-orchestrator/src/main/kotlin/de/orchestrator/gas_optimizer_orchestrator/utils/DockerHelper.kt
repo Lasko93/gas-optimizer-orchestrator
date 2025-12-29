@@ -43,6 +43,58 @@ class DockerHelper(
         dockerCompose(args, env)
     }
 
+    /**
+     * Executes bash script in container and returns the output.
+     * Does not throw on non-zero exit codes (useful for tools like Slither).
+     */
+    fun dockerComposeExecBashWithOutput(
+        service: String,
+        bashScript: String,
+        env: Map<String, String> = emptyMap(),
+        tty: Boolean = false,
+        failOnError: Boolean = false
+    ): String {
+        val args = mutableListOf("exec")
+        if (!tty) args += "-T"
+        args += listOf(service, "bash", "-lc", bashScript)
+
+        return runCommandWithOutput(
+            command = listOf("docker", "compose", "-f", composeFile.absolutePath) + args,
+            environment = env,
+            failOnError = failOnError
+        )
+    }
+
+    /**
+     * Runs command and returns output as String.
+     * Optionally fails on non-zero exit code.
+     */
+    fun runCommandWithOutput(
+        command: List<String>,
+        environment: Map<String, String> = emptyMap(),
+        failOnError: Boolean = false
+    ): String {
+        val workDir = composeFile.absoluteFile.parentFile ?: File(".")
+        val pb = ProcessBuilder(command)
+            .directory(workDir)
+            .redirectErrorStream(true)
+
+        pb.environment().putAll(environment)
+
+        val process = pb.start()
+
+        val output = process.inputStream.bufferedReader().readText()
+        val exit = process.waitFor()
+
+        if (failOnError && exit != 0) {
+            throw IllegalStateException(
+                "Command failed (exit=$exit): $command\n--- output ---\n$output"
+            )
+        }
+
+        return output
+    }
+
     fun dockerCompose(
         composeArgs: List<String>,
         env: Map<String, String> = emptyMap()
