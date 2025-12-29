@@ -22,7 +22,13 @@ class InteractionCreationService(
         val abi: List<JsonNode> = objectMapper.readTree(abiJson).toList()
 
         return transactions
-            .filter { it.input.startsWith("0x") && it.input.length > 10 && it.to !== null}
+            .filter {
+                it.input.startsWith("0x") &&
+                        it.input.length > 10 &&
+                        it.to != null &&
+                        it.isError == "0" &&
+                        it.txreceipt_status == "1"
+            }
             .mapNotNull { tx ->
 
                 val selector = tx.input.take(10)
