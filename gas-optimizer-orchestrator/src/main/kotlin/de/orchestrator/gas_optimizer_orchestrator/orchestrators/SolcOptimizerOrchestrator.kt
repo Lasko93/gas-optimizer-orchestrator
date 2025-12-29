@@ -4,6 +4,7 @@ package de.orchestrator.gas_optimizer_orchestrator.orchestrators
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.*
+import de.orchestrator.gas_optimizer_orchestrator.model.compilation.CompiledIrRun
 import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
 import de.orchestrator.gas_optimizer_orchestrator.service.ForkReplayService
