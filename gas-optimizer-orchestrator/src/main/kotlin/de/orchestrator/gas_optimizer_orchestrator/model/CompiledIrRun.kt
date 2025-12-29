@@ -7,5 +7,7 @@ data class CompiledIrRun(
     val combinedJsonFile: File,
     val creationBytecode: String,
     val runtimeBytecode: String,
-    val solcVersion: String? = null
+    val solcVersion: String? = null,
+    val creationBytecodeSize: Int = (creationBytecode.removePrefix("0x").length) / 2,
+    val runtimeBytecodeSize: Int = (runtimeBytecode.removePrefix("0x").length) / 2
 )

@@ -77,6 +77,8 @@ class IrRunOrchestrator(
                 contractName = srcMeta.contractName,
                 contractAddress = srcMeta.address,
                 compilerInfo = CompilerInfo(solcVersion = run.solcVersion ?: srcMeta.compilerVersion),
+                creationBytecode = run.creationBytecode,
+                runtimeBytecode = run.runtimeBytecode,
                 gasProfile = GasProfile(
                     deploymentGasUsed = deploymentGasUsed,
                     functionCalls = functionCalls

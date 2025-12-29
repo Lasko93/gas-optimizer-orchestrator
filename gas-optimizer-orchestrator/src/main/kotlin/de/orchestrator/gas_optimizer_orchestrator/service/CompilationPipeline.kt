@@ -45,7 +45,7 @@ class CompilationPipeline(
         return CompiledContract(
             artifactFile = combinedJson,
             creationBytecode = creation,
-            deployBytecode = runtime
+            runtimeBytecode = runtime
         )
     }
 

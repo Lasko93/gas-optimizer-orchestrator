@@ -4,6 +4,10 @@ data class GasTrackingResults(
     val contractName: String,
     val contractAddress: String,
     val compilerInfo: CompilerInfo,
+    val creationBytecode: String,
+    val runtimeBytecode: String,
+    val creationBytecodeSize: Int = (creationBytecode.removePrefix("0x").length) / 2,
+    val runtimeBytecodeSize: Int = (runtimeBytecode.removePrefix("0x").length) / 2,
     val gasProfile: GasProfile,
     val runContext: RunContext? = null
 )

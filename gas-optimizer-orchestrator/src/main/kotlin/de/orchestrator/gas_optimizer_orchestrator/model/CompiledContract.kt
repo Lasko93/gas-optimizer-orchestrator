@@ -5,5 +5,5 @@ import java.io.File
 data class CompiledContract(
     val artifactFile: File,
     val creationBytecode: String,
-    val deployBytecode: String
+    val runtimeBytecode: String
 )

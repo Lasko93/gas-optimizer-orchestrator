@@ -81,6 +81,8 @@ class InitialRunOrchestrator(
         return GasTrackingResults(
             contractName = srcMeta.contractName,
             contractAddress = srcMeta.address,
+            creationBytecode = compiled.creationBytecode,
+            runtimeBytecode = compiled.runtimeBytecode,
             compilerInfo = CompilerInfo(solcVersion = srcMeta.compilerVersion),
             gasProfile = GasProfile(
                 deploymentGasUsed = deploymentGasUsed,
