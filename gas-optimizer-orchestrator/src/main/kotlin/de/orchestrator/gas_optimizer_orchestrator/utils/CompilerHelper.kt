@@ -8,4 +8,14 @@ object CompilerHelper {
             .substringBefore("+")
             .substringBefore("-")
     }
+    fun evmFlag(evmVersion: String?): String {
+        val v = evmVersion?.trim()
+        if (v.isNullOrEmpty()) return ""
+        if (v.equals("default", ignoreCase = true)) return ""
+        return "--evm-version $v"
+    }
+
+    fun optimizerFlags(optimizationUsed: Boolean, runs: Int): String {
+        return if (optimizationUsed) "--optimize --optimize-runs $runs" else ""
+    }
 }
