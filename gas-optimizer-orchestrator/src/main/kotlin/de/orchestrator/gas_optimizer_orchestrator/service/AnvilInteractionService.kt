@@ -45,6 +45,10 @@ class AnvilInteractionService(
 
         val receipt = deployContract(bytecode = deployBytecode, value = BigInteger.ZERO)
 
+        if (receipt.status != "0x1") {
+            throw IllegalStateException("Deployment failed: status=${receipt.status}, gasUsed=${receipt.gasUsed}")
+        }
+
         val contractAddress = receipt.contractAddress
             ?: throw IllegalStateException("Anvil did not return a contract address")
 
