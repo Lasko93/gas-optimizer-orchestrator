@@ -8,9 +8,7 @@ import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionServic
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
 import de.orchestrator.gas_optimizer_orchestrator.service.ForkReplayService
 import de.orchestrator.gas_optimizer_orchestrator.service.InteractionCreationService
-import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.GasTrackingUtil.mapOutcomeToFunctionGasUsed
-import de.orchestrator.gas_optimizer_orchestrator.utils.ReceiptUtil.isSuccess
 import de.orchestrator.gas_optimizer_orchestrator.utils.SignatureUtil.signature
 import org.springframework.stereotype.Service
 
@@ -62,7 +60,7 @@ class IrRunOrchestrator(
             val functionCalls = interactions.map { interaction ->
                 val sig = signature(interaction.functionName, interaction.abiTypes)
 
-                val outcome = forkReplayService.replayOnForkWithFallback(
+                val outcome = forkReplayService.replayOnForkAtPreviousBlock(
                     interaction = interaction,
                     beforeSend = {
                         anvilManager.replaceRuntimeBytecode(

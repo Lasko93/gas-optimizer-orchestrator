@@ -53,7 +53,7 @@ class InitialRunOrchestrator(
         // 4) Replay on fork + map to FunctionGasUsed
         val functionCalls = interactions.map { interaction ->
             val signature = SignatureUtil.signature(interaction.functionName, interaction.abiTypes)
-            val outcome = forkReplayService.replayOnForkWithFallback(interaction)
+            val outcome = forkReplayService.replayOnForkAtPreviousBlock(interaction)
 
             val receipt = outcome.receipt
             if (receipt != null) {

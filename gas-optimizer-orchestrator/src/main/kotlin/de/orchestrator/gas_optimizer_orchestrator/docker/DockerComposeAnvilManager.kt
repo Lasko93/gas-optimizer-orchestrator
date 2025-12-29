@@ -8,8 +8,8 @@ class DockerComposeAnvilManager(
 ) {
     val rpcUrl = "http://localhost:8545"
 
-    fun <T> withAnvilFork(blockNumber: Long, fn: () -> T): T {
-        startAnvilFork(blockNumber)
+    fun <T> withAnvilFork(blockNumber: Long,timeStamp: String, fn: () -> T): T {
+        startAnvilFork(blockNumber, timeStamp)
         docker.waitForRpc(rpcUrl)
         return try {
             fn()
@@ -18,11 +18,12 @@ class DockerComposeAnvilManager(
         }
     }
 
-    fun startAnvilFork(blockNumber: Long) {
+    fun startAnvilFork(blockNumber: Long, timeStamp: String = "0") {
         val env = mapOf(
             "ENABLE_FORK" to "true",
             "ANVIL_FORK_BLOCK" to blockNumber.toString(),
-            "ALCHEMY_API_KEY" to (System.getenv("ALCHEMY_API_KEY") ?: "")
+            "ALCHEMY_API_KEY" to (System.getenv("ALCHEMY_API_KEY") ?: ""),
+            "ANVIL_TIMESTAMP" to timeStamp
         )
 
         println("Starting Anvil fork at block $blockNumber")
