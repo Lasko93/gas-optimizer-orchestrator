@@ -9,5 +9,6 @@ data class ContractSourceCodeResult(
     val evmVersion: String?,
     val sourceCode: String,          // normalized SourceCode (double-braces stripped)
     val isStandardJsonInput: Boolean, // true if SourceCode is Solidity standard-json-input
-    val constructorArgumentsHex: String
+    val constructorArgumentsHex: String,
+    val remappings: List<String> = emptyList()
 )

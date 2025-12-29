@@ -20,6 +20,7 @@ class DockerComposeCompilerManager(
     fun compileViaIrRunsCombinedJson(
         solFileName: String,
         solcVersion: String,
+        remappings: List<String> = emptyList(),
         runsList: List<Int> = listOf(1, 200, 10_000),
         outDirName: String = "out"
     ): List<File> {
@@ -34,21 +35,27 @@ class DockerComposeCompilerManager(
         require(hostSol.exists()) { "Solidity file not found: ${hostSol.absolutePath}" }
 
         val hostOutDir = File(hostShareDir, outDirName).apply { mkdirs() }
-
         val runsTokens = runsList.joinToString(" ") { it.toString() }
+        val remapArgs = remappings.joinToString(" ")
 
         val script = """
         set -euo pipefail
         mkdir -p "/share/$outDirName"
+        cd /share
+    
         for r in $runsTokens; do
-          solc \
+          out_file="/share/$outDirName/viair_runs${'$'}r.json"
+            
+          solc $remapArgs \
+            "$solFileName" \
+            --combined-json abi,ast,bin,bin-runtime,srcmap,srcmap-runtime,userdoc,devdoc,hashes \
+            --allow-paths .,/share \
             --via-ir \
-            --optimize --optimize-runs "${'$'}r" \
-            --combined-json bin,bin-runtime \
-            --pretty-json \
-            --base-path /share --allow-paths /share \
-            "/share/$solFileName" \
-            > "/share/$outDirName/viair_runs${'$'}r.json"
+            --optimize \
+            --optimize-runs "${'$'}r" \
+            > "${'$'}out_file"
+          
+          test -f "${'$'}out_file"
         done
     """.trimIndent()
 
@@ -60,6 +67,7 @@ class DockerComposeCompilerManager(
     fun compileSolcNoOptimizeCombinedJson(
         solFileName: String,
         solcVersion: String,
+        remappings: List<String> = emptyList(),
         outFileName: String = "baseline_noopt.json",
         outDirName: String = "out"
     ): File {
@@ -73,18 +81,20 @@ class DockerComposeCompilerManager(
         val hostOutDir = File(hostShareDir, outDirName).apply { mkdirs() }
         val hostOutFile = File(hostOutDir, outFileName)
 
-        val script = """
-        set -euo pipefail
-        mkdir -p "/share/$outDirName"
+        val remapArgs = remappings.joinToString(" ")
 
-        # no optimizer, no via-ir
-        solc \
-          --combined-json bin,bin-runtime \
-          --pretty-json \
-          --base-path /share --allow-paths /share \
-          "/share/$solFileName" \
-          > "/share/$outDirName/$outFileName"
-    """.trimIndent()
+        val script = """
+    set -euo pipefail
+    mkdir -p "/share/$outDirName"
+    cd /share
+
+    # Compile directly with solc
+    solc $remapArgs \
+      "$solFileName" \
+      --combined-json abi,ast,bin,bin-runtime,srcmap,srcmap-runtime,userdoc,devdoc,hashes \
+      --allow-paths .,/share \
+      > "/share/$outDirName/$outFileName"
+""".trimIndent()
 
         docker.dockerComposeExecBash(serviceName, script, tty = false)
 
@@ -111,14 +121,7 @@ class DockerComposeCompilerManager(
 
     fun useSolcVersion(solcVersionRaw: String) {
         val v = normalizeSolcVersion(solcVersionRaw)
-
-        val script = """
-        set -euo pipefail
-        solc-select use "$v" --always-install
-        solc --version
-    """.trimIndent()
-
+        val script = """solc-select use "$v" --always-install && chmod +x /home/ethsec/.solc-select/artifacts/solc-$v/solc-$v 2>/dev/null; solc --version"""
         docker.dockerComposeExecBash(serviceName, script, tty = false)
     }
-
 }

@@ -13,6 +13,7 @@ import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.normaliz
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.normalizeEtherscanSourceField
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.optionalText
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.requireNonEmptyResultArray
+import de.orchestrator.gas_optimizer_orchestrator.utils.JsonHelper.extractRemappingsFromStandardJson
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
@@ -67,6 +68,14 @@ class EtherScanService(
         }
 
         val normalizedSource = normalizeEtherscanSourceField(rawSourceField)
+        val isStandardJson = looksLikeStandardJson(normalizedSource)
+
+        // Extract remappings from standard JSON input
+        val remappings = if (isStandardJson) {
+            extractRemappingsFromStandardJson(normalizedSource)
+        } else {
+            emptyList()
+        }
 
         return ContractSourceCodeResult(
             address = trimmedAddress,
@@ -76,8 +85,9 @@ class EtherScanService(
             runs = entry["Runs"]?.asInt() ?: 0,
             evmVersion = entry["EVMVersion"]?.asText(),
             sourceCode = normalizedSource,
-            isStandardJsonInput = looksLikeStandardJson(normalizedSource),
-            constructorArgumentsHex = optionalText(entry, "ConstructorArguments")
+            isStandardJsonInput = isStandardJson,
+            constructorArgumentsHex = optionalText(entry, "ConstructorArguments"),
+            remappings = remappings
         )
     }
 

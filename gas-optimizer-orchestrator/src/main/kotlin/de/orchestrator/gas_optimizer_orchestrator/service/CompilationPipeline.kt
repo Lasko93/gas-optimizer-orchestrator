@@ -5,9 +5,7 @@ import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeCompilerMa
 import de.orchestrator.gas_optimizer_orchestrator.model.CompiledContract
 import de.orchestrator.gas_optimizer_orchestrator.model.CompiledIrRun
 import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
-import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.CombinedJsonHelper
-import de.orchestrator.gas_optimizer_orchestrator.utils.JsonHelper
 import org.springframework.stereotype.Service
 import java.io.File
 import java.nio.file.Path
@@ -34,7 +32,8 @@ class CompilationPipeline(
             solFileName = "${srcMeta.contractName}.sol",
             solcVersion = srcMeta.compilerVersion,
             outDirName = outDirName,
-            outFileName = outFileName
+            outFileName = outFileName,
+            remappings = srcMeta.remappings,
         )
 
         val (creation, runtime, solcVersion) = CombinedJsonHelper.extractCreationAndRuntime(
@@ -65,7 +64,8 @@ class CompilationPipeline(
             solFileName = srcMeta.contractName+".sol",
             runsList = runsList,
             outDirName = outDirName,
-            solcVersion = srcMeta.compilerVersion
+            solcVersion = srcMeta.compilerVersion,
+            remappings = srcMeta.remappings,
         )
 
         return runsList.zip(combinedJsonFiles).map { (runs, file) ->
