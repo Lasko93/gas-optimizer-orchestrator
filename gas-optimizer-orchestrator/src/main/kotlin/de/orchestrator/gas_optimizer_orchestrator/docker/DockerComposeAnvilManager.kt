@@ -1,6 +1,7 @@
 package de.orchestrator.gas_optimizer_orchestrator.docker
 
 import org.springframework.stereotype.Service
+import java.math.BigInteger
 
 @Service
 class DockerComposeAnvilManager(
@@ -28,6 +29,7 @@ class DockerComposeAnvilManager(
 
         println("Starting Anvil fork at block $blockNumber")
         docker.dockerComposeUp("anvil", env = env, detached = true, forceRecreate = true)
+        docker.waitForRpc(rpcUrl)
     }
 
     fun startAnvilNoFork(genesisTimestamp: String? = "0") {
@@ -63,5 +65,47 @@ class DockerComposeAnvilManager(
         }
 
         println("✔ anvil_setCode succeeded for $address")
+    }
+    fun setBalance(address: String, balanceWei: BigInteger) {
+        require(address.startsWith("0x")) { "Address must start with 0x" }
+
+        val hexBalance = "0x" + balanceWei.toString(16)
+        val payload = """
+        {
+          "jsonrpc":"2.0",
+          "id":1,
+          "method":"anvil_setBalance",
+          "params":["$address","$hexBalance"]
+        }
+    """.trimIndent()
+
+        val resp = docker.postJson(rpcUrl, payload)
+
+        if (resp.code != 200) {
+            throw IllegalStateException("Failed to set balance: HTTP ${resp.code}\n${resp.body}")
+        }
+
+        println("✔ anvil_setBalance succeeded for $address ($hexBalance wei)")
+    }
+
+    fun impersonateAccount(address: String) {
+        require(address.startsWith("0x")) { "Address must start with 0x" }
+
+        val payload = """
+        {
+          "jsonrpc":"2.0",
+          "id":1,
+          "method":"anvil_impersonateAccount",
+          "params":["$address"]
+        }
+    """.trimIndent()
+
+        val resp = docker.postJson(rpcUrl, payload)
+
+        if (resp.code != 200) {
+            throw IllegalStateException("Failed to impersonate account: HTTP ${resp.code}\n${resp.body}")
+        }
+
+        println("✔ Impersonating $address")
     }
 }

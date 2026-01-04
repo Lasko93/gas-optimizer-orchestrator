@@ -8,6 +8,7 @@ services:
         if [ "$ENABLE_FORK" = "true" ]; then
           echo "🚀 Starting ANVIL WITH fork...";
           anvil --host 0.0.0.0 --port 8545 \
+                --disable-block-gas-limit \
                 --fork-url https://eth-mainnet.g.alchemy.com/v2/$ALCHEMY_API_KEY \
                 --fork-block-number $ANVIL_FORK_BLOCK \
                 --auto-impersonate --chain-id 1 --code-size-limit 4294967295;

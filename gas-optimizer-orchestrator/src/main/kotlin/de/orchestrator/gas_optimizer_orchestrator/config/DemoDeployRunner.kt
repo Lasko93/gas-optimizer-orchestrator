@@ -21,12 +21,15 @@ class DemoDeployConfig(
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        val target = "0xdAe1ACC21eD8E26BEB311Edeb70e1ae5e27e8A0b"
+        val target = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
 
+        val creationInfo = etherScanService.getContractCreationInfo(target)
+        val creationTransaction = etherScanService.getTransactionByHash(creationInfo.txHash)
         val transactions = etherScanService.getTransactionsForAddress(target)
         val abiJson = etherScanService.getContractAbi(target)
         val srcMeta = etherScanService.getContractSourceCode(target, chainId = "1")
 
+        println(creationInfo)
         // 1. Slither Analysis
         println("=== Running Slither Analysis ===")
         val slitherReport = slitherOrchestrator.analyzeGasOptimizations(srcMeta)
@@ -36,7 +39,8 @@ class DemoDeployConfig(
         val baseline = initialRunOrchestrator.runInitial(
             transactions = transactions,
             srcMeta = srcMeta,
-            abiJson = abiJson
+            abiJson = abiJson,
+            creationTransaction = creationTransaction,
         )
 
         // 3. Optimized Compilations
@@ -44,7 +48,8 @@ class DemoDeployConfig(
         val optimizedResults = solcOptimizerRunOrchestrator.runSolcOptimizerRuns(
             transactions = transactions,
             srcMeta = srcMeta,
-            abiJson = abiJson
+            abiJson = abiJson,
+            creationTransaction = creationTransaction,
         )
 
         // 4. Print Full Report

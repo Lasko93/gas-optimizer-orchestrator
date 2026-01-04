@@ -1,10 +1,11 @@
 package de.orchestrator.gas_optimizer_orchestrator.externalApi
 
-import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import de.orchestrator.gas_optimizer_orchestrator.exceptions.EtherScanException
+import de.orchestrator.gas_optimizer_orchestrator.model.ContractCreationInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.EtherscanTransaction
+import de.orchestrator.gas_optimizer_orchestrator.model.FullTransaction
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.ensureOk
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.extractMethodSelector
@@ -17,6 +18,7 @@ import de.orchestrator.gas_optimizer_orchestrator.utils.JsonHelper.extractRemapp
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
+import java.math.BigInteger
 
 @Service
 class EtherScanService(
@@ -176,24 +178,80 @@ class EtherScanService(
         // Return ABI text directly
         return resultString
     }
-    fun getCreationTimestampSeconds(
+    /* ============================================================
+    * 3) GET CONTRACT CREATION TRANSACTION
+    * ============================================================ */
+
+    fun getContractCreationInfo(
         contractAddress: String,
         chainId: String = "1"
-    ): String {
-        val txs = getTransactionsForAddress(
-            address = contractAddress,
-            chainId = chainId,
-            startBlock = 0,
-            endBlock = 9_999_999_999,
-            page = 1,
-            offset = 10_000,   // plenty to include the creation tx
-            sort = "asc"
+    ): ContractCreationInfo {
+        val trimmedAddress = normalizeAddress(contractAddress)
+
+        val rawJson = client.get()
+            .uri { b ->
+                b.queryParam("apikey", apiKey)
+                    .queryParam("chainid", chainId)
+                    .queryParam("module", "contract")
+                    .queryParam("action", "getcontractcreation")
+                    .queryParam("contractaddresses", trimmedAddress)
+                    .build()
+            }
+            .retrieve()
+            .body(String::class.java)
+            ?: throw IllegalStateException("Null response from Etherscan")
+
+        val root = mapper.readTree(rawJson)
+        ensureOk(root, "getcontractcreation")
+        val arr = requireNonEmptyResultArray(root, "getcontractcreation")
+
+        val entry = arr[0]
+        return ContractCreationInfo(
+            contractAddress = entry["contractAddress"]?.asText()
+                ?: throw EtherScanException("0", "Missing contractAddress in response"),
+            contractCreator = entry["contractCreator"]?.asText()
+                ?: throw EtherScanException("0", "Missing contractCreator in response"),
+            txHash = entry["txHash"]?.asText()
+                ?: throw EtherScanException("0", "Missing txHash in response")
         )
+    }
 
-        val creationTx = txs.minByOrNull { it.blockNumber }
-            ?: throw IllegalStateException("No transactions found for $contractAddress – cannot infer creation timestamp")
+    /* ============================================================
+     * 4) GET TRANSACTION BY HASH (for replay)
+     * ============================================================ */
 
-        // if your timeStamp is a String/BigInteger, adapt this line:
-        return creationTx.timeStamp
+
+    fun getTransactionByHash(
+        txHash: String,
+        chainId: String = "1"
+    ): FullTransaction {
+        val rawJson = client.get()
+            .uri { b ->
+                b.queryParam("apikey", apiKey)
+                    .queryParam("chainid", chainId)
+                    .queryParam("module", "proxy")
+                    .queryParam("action", "eth_getTransactionByHash")
+                    .queryParam("txhash", txHash)
+                    .build()
+            }
+            .retrieve()
+            .body(String::class.java)
+            ?: throw IllegalStateException("Null response from Etherscan")
+
+        val root = mapper.readTree(rawJson)
+        val result = root["result"]
+            ?: throw EtherScanException("0", "Transaction not found: $txHash")
+
+        return FullTransaction(
+            hash = result["hash"].asText(),
+            from = result["from"].asText(),
+            to = result["to"]?.asText(),
+            value = result["value"].asText().removePrefix("0x").toBigIntegerOrNull(16) ?: BigInteger.ZERO,
+            gas = result["gas"].asText().removePrefix("0x").toBigInteger(16),
+            gasPrice = result["gasPrice"].asText().removePrefix("0x").toBigInteger(16),
+            input = result["input"].asText(),
+            nonce = result["nonce"].asText().removePrefix("0x").toBigInteger(16),
+            blockNumber = result["blockNumber"].asText().removePrefix("0x").toLong(16)
+        )
     }
 }

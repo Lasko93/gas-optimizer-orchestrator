@@ -9,6 +9,7 @@ import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionServic
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
 import de.orchestrator.gas_optimizer_orchestrator.service.ForkReplayService
 import de.orchestrator.gas_optimizer_orchestrator.service.InteractionCreationService
+import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.GasTrackingUtil.mapOutcomeToFunctionGasUsed
 import de.orchestrator.gas_optimizer_orchestrator.utils.SignatureUtil.signature
 import org.springframework.stereotype.Service
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Service
 class SolcOptimizerOrchestrator(
     private val compilationPipeline: CompilationPipeline,
     private val anvilManager: DockerComposeAnvilManager,
-    private val deployService: AnvilInteractionService,
+    private val anvilService: AnvilInteractionService,
     private val interactionCreationService: InteractionCreationService,
     private val forkReplayService: ForkReplayService,
     private val paths: GasOptimizerPathsProperties
@@ -35,6 +36,7 @@ class SolcOptimizerOrchestrator(
         transactions: List<EtherscanTransaction>,
         srcMeta: ContractSourceCodeResult,
         abiJson: String,
+        creationTransaction: FullTransaction,
         runsList: List<Int> = listOf(1, 200, 10_000),
         outDirName: String = "out",
         viaIrRuns: Boolean = false
@@ -56,9 +58,16 @@ class SolcOptimizerOrchestrator(
             transactions = transactions
         )
 
+
         // 3) Execute each IR run
         return compiledRuns.associate { run ->
-            val deploymentGasUsed = deployService.deployRawBytecode(run.creationBytecode,srcMeta.constructorArgumentsHex).gasUsed?.toLong() ?: 0L
+
+            val deployBytecode = BytecodeUtil.appendConstructorArgs(
+                bytecode = run.creationBytecode,
+                constructorArgsHex = srcMeta.constructorArgumentsHex
+            )
+
+            val deploymentGasUsed = anvilService.deployOnFork(deployBytecode, creationTransaction).gasUsed?.toLong() ?: 0L
 
             val functionCalls = interactions.map { interaction ->
                 val sig = signature(interaction.functionName, interaction.abiTypes)

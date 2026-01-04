@@ -2,8 +2,10 @@ package de.orchestrator.gas_optimizer_orchestrator.orchestrators
 
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
 import de.orchestrator.gas_optimizer_orchestrator.model.CompilerInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.ContractCreationInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.EtherscanTransaction
+import de.orchestrator.gas_optimizer_orchestrator.model.FullTransaction
 import de.orchestrator.gas_optimizer_orchestrator.model.FunctionGasUsed
 import de.orchestrator.gas_optimizer_orchestrator.model.GasProfile
 import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
@@ -12,6 +14,7 @@ import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionServic
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
 import de.orchestrator.gas_optimizer_orchestrator.service.ForkReplayService
 import de.orchestrator.gas_optimizer_orchestrator.service.InteractionCreationService
+import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.ReceiptUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.SignatureUtil
 import org.springframework.stereotype.Service
@@ -29,7 +32,8 @@ class InitialRunOrchestrator(
     fun runInitial(
         transactions: List<EtherscanTransaction>,
         srcMeta: ContractSourceCodeResult,
-        abiJson: String
+        abiJson: String,
+        creationTransaction: FullTransaction
     ): GasTrackingResults {
 
         // 1) Compile + get deploy bytecode
@@ -39,8 +43,12 @@ class InitialRunOrchestrator(
             outFileName = srcMeta.contractName+".json"
         )
 
-        // 2) Measure deployment gas on no-fork (not used for replay)
-        val deployReceipt = anvilService.deployRawBytecode(compiled.creationBytecode, srcMeta.constructorArgumentsHex)
+        val deployBytecode = BytecodeUtil.appendConstructorArgs(
+            bytecode = compiled.creationBytecode,
+            constructorArgsHex = srcMeta.constructorArgumentsHex
+        )
+
+        val deployReceipt = anvilService.deployOnFork(deployBytecode, creationTransaction)
         val deploymentGasUsed = deployReceipt.gasUsed?.toLong() ?: 0L
 
         // 3) Build interactions against TARGET address (forked contract)
