@@ -38,7 +38,6 @@ object PrintUtil {
         println("  Informational:  ${report.informationalFindings}")
         println()
 
-        // Geschätzte Einsparungen
         val savings = report.estimateTotalSavings(expectedCallsPerFunction = 100)
         println("Estimated Gas Savings (if all optimizations applied):")
         println("  Deployment:        ~${savings.estimatedDeploymentSavings} gas")
@@ -108,19 +107,7 @@ object PrintUtil {
         println("Deployment gas:    ${result.gasProfile.deploymentGasUsed}")
         println()
 
-        if (result.gasProfile.functionCalls.isNotEmpty()) {
-            println("Function Calls (${result.gasProfile.functionCalls.size} replayed):")
-            println("─".repeat(LINE_WIDTH))
-            result.gasProfile.functionCalls.forEach {
-                val status = if (it.succeeded) "✓" else "✗"
-                println("  $status ${it.functionSignature}")
-                println("    Gas: ${it.gasUsed}")
-                if (!it.succeeded && it.revertReason != null) {
-                    println("    Revert: ${it.revertReason}")
-                }
-            }
-        }
-        println()
+        printFunctionCallsDetailed(result.gasProfile.functionCalls, "Function Calls")
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -155,7 +142,13 @@ object PrintUtil {
                 println("  Function Calls:")
                 r.gasProfile.functionCalls.forEach {
                     val status = if (it.succeeded) "✓" else "✗"
-                    println("    $status ${it.functionSignature}: ${it.gasUsed} gas")
+                    print("    $status ${it.functionSignature}: ${it.gasUsed} gas")
+                    if (!it.succeeded && !it.revertReason.isNullOrBlank()) {
+                        println()
+                        println("      ↳ ${truncateReason(it.revertReason)}")
+                    } else {
+                        println()
+                    }
                 }
             }
             println()
@@ -181,7 +174,6 @@ object PrintUtil {
         val baselineRuntimeSize = baseline.runtimeBytecodeSize
         val baselineBySig = baseline.gasProfile.functionCalls.associateBy { it.functionSignature }
 
-        // Header
         println("Baseline (no optimization):")
         println("  Deployment:      ${baselineDeploy} gas")
         println("  Creation size:   ${baselineCreationSize} bytes")
@@ -222,14 +214,52 @@ object PrintUtil {
                     val pct = percentageChange(baseGas, call.gasUsed)
                     val icon = if (delta < 0) "📉" else if (delta > 0) "📈" else "➖"
 
-                    println("    $icon ${call.functionSignature}")
+                    val statusIcon = if (call.succeeded) "✓" else "✗"
+                    println("    $icon $statusIcon ${call.functionSignature}")
                     println("       ${call.gasUsed} gas (${d(delta)}, ${formatPercent(pct)})")
+
+                    if (!call.succeeded && !call.revertReason.isNullOrBlank()) {
+                        println("       ↳ ${truncateReason(call.revertReason)}")
+                    }
                 }
             }
             println()
         }
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // Failure Summary (new section)
+    // ════════════════════════════════════════════════════════════════
+
+    fun printFailureSummary(
+        baseline: GasTrackingResults,
+        optimizedResults: Map<Int, GasTrackingResults>
+    ) {
+        val allResults = mapOf(-1 to baseline) + optimizedResults
+        val failures = allResults.flatMap { (runs, result) ->
+            result.gasProfile.functionCalls
+                .filter { !it.succeeded }
+                .map { Triple(runs, it.functionSignature, it.revertReason) }
+        }
+
+        if (failures.isEmpty()) return
+
+        println()
+        println("╔${"═".repeat(LINE_WIDTH)}╗")
+        println("║${centerText("FAILURE SUMMARY", LINE_WIDTH)}║")
+        println("╚${"═".repeat(LINE_WIDTH)}╝")
+        println()
+
+        // Group by function signature
+        failures.groupBy { it.second }.forEach { (sig, failureList) ->
+            println("  $sig")
+            failureList.forEach { (runs, _, reason) ->
+                val runsLabel = if (runs == -1) "baseline" else "runs=$runs"
+                println("    ✗ [$runsLabel] ${truncateReason(reason ?: "Unknown error")}")
+            }
+            println()
+        }
+    }
 
     // ════════════════════════════════════════════════════════════════
     // Full Report (combines all sections)
@@ -262,12 +292,44 @@ object PrintUtil {
         // Delta summary
         printDeltaSummary(baseline, optimizedResults)
 
-
+        // Failure summary
+        printFailureSummary(baseline, optimizedResults)
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Helper
+    // Helpers
     // ════════════════════════════════════════════════════════════════
+
+    private fun printFunctionCallsDetailed(
+        calls: List<de.orchestrator.gas_optimizer_orchestrator.model.FunctionGasUsed>,
+        title: String
+    ) {
+        if (calls.isEmpty()) return
+
+        val succeeded = calls.count { it.succeeded }
+        val failed = calls.size - succeeded
+
+        println("$title ($succeeded succeeded, $failed failed):")
+        println("─".repeat(LINE_WIDTH))
+
+        calls.forEach {
+            val status = if (it.succeeded) "✓" else "✗"
+            println("  $status ${it.functionSignature}")
+            println("    Gas: ${it.gasUsed}")
+            if (!it.succeeded && !it.revertReason.isNullOrBlank()) {
+                println("    Revert: ${it.revertReason}")
+            }
+        }
+        println()
+    }
+
+    private fun truncateReason(reason: String, maxLength: Int = 50): String {
+        return if (reason.length > maxLength) {
+            reason.take(maxLength - 3) + "..."
+        } else {
+            reason
+        }
+    }
 
     private fun centerText(text: String, width: Int): String {
         val padding = (width - text.length) / 2

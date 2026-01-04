@@ -2,7 +2,6 @@ package de.orchestrator.gas_optimizer_orchestrator.utils
 
 import de.orchestrator.gas_optimizer_orchestrator.model.FunctionGasUsed
 import de.orchestrator.gas_optimizer_orchestrator.model.ReplayOutcome
-import de.orchestrator.gas_optimizer_orchestrator.utils.ReceiptUtil.isSuccess
 
 object GasTrackingUtil {
 
@@ -11,25 +10,30 @@ object GasTrackingUtil {
         functionSignature: String,
         outcome: ReplayOutcome
     ): FunctionGasUsed {
-        val receipt = outcome.receipt
-        return if (receipt != null) {
-            val ok = isSuccess(receipt)
-            FunctionGasUsed(
+        return when (outcome) {
+            is ReplayOutcome.Success -> FunctionGasUsed(
                 functionName = functionName,
                 functionSignature = functionSignature,
-                gasUsed = receipt.gasUsed?.toLong() ?: 0L,
-                succeeded = ok,
-                txHash = receipt.transactionHash,
-                revertReason = if (ok) null else "status=${receipt.status}"
+                gasUsed = outcome.gasUsed.toLong(),
+                succeeded = true,
+                txHash = outcome.receipt.transactionHash,
+                revertReason = null
             )
-        } else {
-            FunctionGasUsed(
+            is ReplayOutcome.Reverted -> FunctionGasUsed(
+                functionName = functionName,
+                functionSignature = functionSignature,
+                gasUsed = outcome.gasUsed.toLong(),
+                succeeded = false,
+                txHash = outcome.receipt.transactionHash,
+                revertReason = outcome.revertReason
+            )
+            is ReplayOutcome.Failed -> FunctionGasUsed(
                 functionName = functionName,
                 functionSignature = functionSignature,
                 gasUsed = 0L,
                 succeeded = false,
                 txHash = null,
-                revertReason = outcome.errorMessage
+                revertReason = outcome.callRevertReason ?: outcome.errorMessage
             )
         }
     }
