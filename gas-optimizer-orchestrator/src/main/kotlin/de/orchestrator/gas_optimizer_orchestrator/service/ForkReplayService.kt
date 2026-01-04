@@ -19,16 +19,18 @@ class ForkReplayService(
 ) {
 
     /**
-     * Replay interaction on a fork with a freshly deployed custom contract.
+     * Replay interaction using bytecode replacement at original address.
      *
      * Flow:
      * 1. Fork at interaction block - 1
-     * 2. Deploy optimized bytecode
-     * 3. Copy storage from original mainnet contract
-     * 4. Update interaction to target new deployed address
-     * 5. Send transaction
+     * 2. Deploy optimized contract (to extract runtime bytecode with immutables initialized)
+     * 3. Replace bytecode at ORIGINAL address with deployed runtime bytecode
+     * 4. Send transaction to ORIGINAL address
      *
-     * This ensures immutables are initialized AND mainnet state is preserved.
+     * This preserves:
+     * - External approvals (tokens approved for original address)
+     * - Immutable values (from fresh deployment)
+     * - Mainnet state (from fork)
      */
     fun replayWithCustomContract(
         interaction: ExecutableInteraction,
@@ -47,7 +49,7 @@ class ForkReplayService(
 
         return try {
             anvilManager.withAnvilFork(forkBlock, interaction.tx.timeStamp) {
-                // 1. Deploy optimized contract
+                // 1. Deploy optimized contract to get runtime bytecode with immutables initialized
                 BytecodeUtil.validateBytecode(creationBytecode)
                 val deployBytecode = BytecodeUtil.appendConstructorArgs(creationBytecode, constructorArgsHex)
 
@@ -63,20 +65,29 @@ class ForkReplayService(
                     data = deployBytecode
                 )
 
-                val newContractAddress = deployReceipt.contractAddress
+                val tempContractAddress = deployReceipt.contractAddress
                     ?: return@withAnvilFork ReplayOutcome.Failed("No contract address from deployment")
 
-                // 2. Copy storage from original mainnet contract
-                anvilManager.copyStorage(fromAddress = originalContractAddress, toAddress = newContractAddress)
+                // 2. Get the deployed runtime bytecode (has immutables initialized)
+                val deployedRuntimeBytecode = web3j.ethGetCode(tempContractAddress, org.web3j.protocol.core.DefaultBlockParameterName.LATEST)
+                    .send()
+                    .code
 
-                // 3. Update interaction to target the new deployed address
-                val updatedInteraction = interaction.copy(contractAddress = newContractAddress)
+                if (deployedRuntimeBytecode.isNullOrBlank() || deployedRuntimeBytecode == "0x") {
+                    return@withAnvilFork ReplayOutcome.Failed("Failed to get deployed runtime bytecode")
+                }
 
-                // 4. Simulate first
-                val revertReason = simulateCall(updatedInteraction)
+                // 3. Replace bytecode at ORIGINAL address with the deployed runtime bytecode
+                anvilManager.replaceRuntimeBytecode(
+                    address = originalContractAddress,
+                    runtimeBytecode = deployedRuntimeBytecode
+                )
 
-                // 5. Send the transaction
-                val receipt = anvilInteractionService.sendInteraction(updatedInteraction)
+                // 4. Simulate first (using original address)
+                val revertReason = simulateCall(interaction)
+
+                // 5. Send transaction to ORIGINAL address
+                val receipt = anvilInteractionService.sendInteraction(interaction)
                 val gasUsed = receipt.gasUsed
 
                 if (receipt.status == "0x1") {
