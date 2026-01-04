@@ -2,11 +2,14 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
+import de.orchestrator.gas_optimizer_orchestrator.model.FullTransaction
 import de.orchestrator.gas_optimizer_orchestrator.model.ReplayOutcome
+import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import org.springframework.stereotype.Service
 import org.web3j.protocol.Web3j
 import org.web3j.protocol.core.DefaultBlockParameterName
 import org.web3j.protocol.core.methods.request.Transaction
+import java.math.BigInteger
 
 @Service
 class ForkReplayService(
@@ -15,9 +18,24 @@ class ForkReplayService(
     private val web3j: Web3j
 ) {
 
-    fun replayOnForkAtPreviousBlock(
+    /**
+     * Replay interaction on a fork with a freshly deployed custom contract.
+     *
+     * Flow:
+     * 1. Fork at interaction block - 1
+     * 2. Deploy optimized bytecode
+     * 3. Copy storage from original mainnet contract
+     * 4. Update interaction to target new deployed address
+     * 5. Send transaction
+     *
+     * This ensures immutables are initialized AND mainnet state is preserved.
+     */
+    fun replayWithCustomContract(
         interaction: ExecutableInteraction,
-        beforeSend: (() -> Unit)? = null
+        creationBytecode: String,
+        constructorArgsHex: String,
+        originalContractAddress: String,
+        creationTx: FullTransaction
     ): ReplayOutcome {
         val bn = interaction.blockNumber.toLongOrNull()
             ?: return ReplayOutcome.Failed("Invalid blockNumber: ${interaction.blockNumber}")
@@ -29,13 +47,36 @@ class ForkReplayService(
 
         return try {
             anvilManager.withAnvilFork(forkBlock, interaction.tx.timeStamp) {
-                beforeSend?.invoke()
+                // 1. Deploy optimized contract
+                BytecodeUtil.validateBytecode(creationBytecode)
+                val deployBytecode = BytecodeUtil.appendConstructorArgs(creationBytecode, constructorArgsHex)
 
-                // Simulate first with eth_call to capture revert reason
-                val revertReason = simulateCall(interaction)
+                anvilManager.impersonateAccount(creationTx.from)
+                anvilManager.setBalance(creationTx.from, BigInteger.TEN.pow(20))
 
-                // Actually send the transaction
-                val receipt = anvilInteractionService.sendInteraction(interaction)
+                val deployReceipt = anvilInteractionService.sendRawTransaction(
+                    from = creationTx.from,
+                    to = null,
+                    value = creationTx.value,
+                    gasLimit = anvilInteractionService.gasLimit(),
+                    gasPrice = creationTx.gasPrice,
+                    data = deployBytecode
+                )
+
+                val newContractAddress = deployReceipt.contractAddress
+                    ?: return@withAnvilFork ReplayOutcome.Failed("No contract address from deployment")
+
+                // 2. Copy storage from original mainnet contract
+                anvilManager.copyStorage(fromAddress = originalContractAddress, toAddress = newContractAddress)
+
+                // 3. Update interaction to target the new deployed address
+                val updatedInteraction = interaction.copy(contractAddress = newContractAddress)
+
+                // 4. Simulate first
+                val revertReason = simulateCall(updatedInteraction)
+
+                // 5. Send the transaction
+                val receipt = anvilInteractionService.sendInteraction(updatedInteraction)
                 val gasUsed = receipt.gasUsed
 
                 if (receipt.status == "0x1") {

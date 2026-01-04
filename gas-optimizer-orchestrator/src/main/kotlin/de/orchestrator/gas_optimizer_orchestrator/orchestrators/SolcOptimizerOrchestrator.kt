@@ -51,35 +51,34 @@ class SolcOptimizerOrchestrator(
             viaVrRuns = viaIrRuns
         )
 
-        // 2) Build interactions once (always target the forked mainnet address)
+        // 2) Build interactions once (they'll be retargeted during each replay)
         val interactions = interactionCreationService.buildInteractions(
             abiJson = abiJson,
-            contractAddress = srcMeta.address,
+            contractAddress = srcMeta.address, // Initial address (will be updated during replay)
             transactions = transactions
         )
-
 
         // 3) Execute each IR run
         return compiledRuns.associate { run ->
 
+            // Measure deployment gas on a separate fork
             val deployBytecode = BytecodeUtil.appendConstructorArgs(
                 bytecode = run.creationBytecode,
                 constructorArgsHex = srcMeta.constructorArgumentsHex
             )
+            val deployReceipt = anvilService.deployOnFork(deployBytecode, creationTransaction)
+            val deploymentGasUsed = deployReceipt.gasUsed?.toLong() ?: 0L
 
-            val deploymentGasUsed = anvilService.deployOnFork(deployBytecode, creationTransaction).gasUsed?.toLong() ?: 0L
-
+            // Replay each interaction with optimized contract deployed fresh in each fork
             val functionCalls = interactions.map { interaction ->
                 val sig = signature(interaction.functionName, interaction.abiTypes)
 
-                val outcome = forkReplayService.replayOnForkAtPreviousBlock(
+                val outcome = forkReplayService.replayWithCustomContract(
                     interaction = interaction,
-                    beforeSend = {
-                        anvilManager.replaceRuntimeBytecode(
-                            address = srcMeta.address,
-                            runtimeBytecode = run.runtimeBytecode
-                        )
-                    }
+                    creationBytecode = run.creationBytecode,
+                    constructorArgsHex = srcMeta.constructorArgumentsHex,
+                    originalContractAddress = srcMeta.address,
+                    creationTx = creationTransaction
                 )
 
                 mapOutcomeToFunctionGasUsed(interaction.functionName, sig, outcome)

@@ -45,20 +45,29 @@ class InitialRunOrchestrator(
             constructorArgsHex = srcMeta.constructorArgumentsHex
         )
 
+        // Measure deployment gas on a separate fork
         val deployReceipt = anvilService.deployOnFork(deployBytecode, creationTransaction)
         val deploymentGasUsed = deployReceipt.gasUsed?.toLong() ?: 0L
 
-        // 2) Build interactions against TARGET address (forked contract)
+        // 2) Build interactions (they'll be retargeted during each replay)
         val interactions = interactionCreationService.buildInteractions(
             abiJson = abiJson,
-            contractAddress = srcMeta.address,
+            contractAddress = srcMeta.address, // Initial address (will be updated during replay)
             transactions = transactions
         )
 
-        // 3) Replay on fork + map to FunctionGasUsed
+        // 3) Replay each interaction with baseline contract deployed fresh in each fork
         val functionCalls = interactions.map { interaction ->
             val signature = SignatureUtil.signature(interaction.functionName, interaction.abiTypes)
-            val outcome = forkReplayService.replayOnForkAtPreviousBlock(interaction)
+
+            val outcome = forkReplayService.replayWithCustomContract(
+                interaction = interaction,
+                creationBytecode = compiled.creationBytecode,
+                constructorArgsHex = srcMeta.constructorArgumentsHex,
+                originalContractAddress = srcMeta.address,
+                creationTx = creationTransaction
+            )
+
             mapOutcomeToFunctionGasUsed(interaction.functionName, signature, outcome)
         }
 

@@ -108,4 +108,89 @@ class DockerComposeAnvilManager(
 
         println("✔ Impersonating $address")
     }
+
+    fun setStorageAt(address: String, storageSlot: String, value: String) {
+        require(address.startsWith("0x")) { "Address must start with 0x" }
+        require(storageSlot.startsWith("0x")) { "Storage slot must start with 0x" }
+        require(value.startsWith("0x")) { "Value must start with 0x" }
+
+        val payload = """
+        {
+          "jsonrpc":"2.0",
+          "id":1,
+          "method":"anvil_setStorageAt",
+          "params":["$address","$storageSlot","$value"]
+        }
+    """.trimIndent()
+
+        val resp = docker.postJson(rpcUrl, payload)
+
+        if (resp.code != 200) {
+            throw IllegalStateException("Failed to set storage: HTTP ${resp.code}\n${resp.body}")
+        }
+
+        println("✔ anvil_setStorageAt succeeded for $address at slot $storageSlot")
+    }
+
+    fun resetReentrancyGuard(address: String, slotIndex: Int = 0) {
+        // Reentrancy guards typically use value 1 for NOT_ENTERED
+        // The slot index depends on where the _status variable is declared in the contract
+        val slot = "0x" + slotIndex.toString(16).padStart(64, '0')
+        val notEnteredValue = "0x" + "1".padStart(64, '0')
+
+        setStorageAt(address, slot, notEnteredValue)
+        println("✔ Reset reentrancy guard for $address (slot $slotIndex)")
+    }
+
+    fun getStorageAt(address: String, storageSlot: String): String {
+        require(address.startsWith("0x")) { "Address must start with 0x" }
+        require(storageSlot.startsWith("0x")) { "Storage slot must start with 0x" }
+
+        val payload = """
+        {
+          "jsonrpc":"2.0",
+          "id":1,
+          "method":"eth_getStorageAt",
+          "params":["$address","$storageSlot","latest"]
+        }
+    """.trimIndent()
+
+        val resp = docker.postJson(rpcUrl, payload)
+
+        if (resp.code != 200) {
+            throw IllegalStateException("Failed to get storage: HTTP ${resp.code}\n${resp.body}")
+        }
+
+        // Parse JSON response to extract result
+        // Response format: {"jsonrpc":"2.0","id":1,"result":"0x..."}
+        val resultRegex = """"result"\s*:\s*"(0x[0-9a-fA-F]+)"""".toRegex()
+        val match = resultRegex.find(resp.body)
+            ?: throw IllegalStateException("Could not parse storage value from response: ${resp.body}")
+
+        return match.groupValues[1]
+    }
+
+    /**
+     * Copy storage from source address to destination address.
+     * Uses a heuristic to copy the most commonly used storage slots.
+     *
+     * @param maxSlots Maximum number of storage slots to copy (default: 100)
+     */
+    fun copyStorage(fromAddress: String, toAddress: String, maxSlots: Int = 100) {
+        println("Copying storage from $fromAddress to $toAddress (checking $maxSlots slots)...")
+        var copiedCount = 0
+
+        for (i in 0 until maxSlots) {
+            val slot = "0x" + i.toString(16).padStart(64, '0')
+            val value = getStorageAt(fromAddress, slot)
+
+            // Only copy non-zero values to reduce RPC calls
+            if (value != "0x0" && value != "0x" + "0".padStart(64, '0')) {
+                setStorageAt(toAddress, slot, value)
+                copiedCount++
+            }
+        }
+
+        println("✔ Copied $copiedCount storage slots from $fromAddress to $toAddress")
+    }
 }
