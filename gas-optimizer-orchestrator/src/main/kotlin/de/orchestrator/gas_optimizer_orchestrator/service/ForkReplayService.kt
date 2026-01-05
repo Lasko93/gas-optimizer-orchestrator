@@ -3,6 +3,7 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import de.orchestrator.gas_optimizer_orchestrator.model.FullTransaction
+import de.orchestrator.gas_optimizer_orchestrator.model.ProxyInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.ProxyType
 import de.orchestrator.gas_optimizer_orchestrator.model.ReplayOutcome
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
@@ -20,6 +21,15 @@ class ForkReplayService(
     private val proxyDetectionService: ProxyDetectionService
 ) {
 
+    /**
+     * New logic (as requested):
+     * - Fork at (interaction.blockNumber - 1)
+     * - Detect proxy vs normal
+     * - Deploy optimized creation bytecode once (so immutables are initialized)
+     * - Read runtime bytecode from the deployed temp contract
+     * - anvil_setCode at the ORIGINAL address we will call (normal: originalContractAddress, proxy: proxyAddress)
+     * - Execute the interaction against that ORIGINAL address and measure gas
+     */
     fun replayWithCustomContract(
         interaction: ExecutableInteraction,
         creationBytecode: String,
@@ -42,12 +52,19 @@ class ForkReplayService(
                 when (proxyInfo.proxyType) {
                     ProxyType.NONE -> handleRegularContract(
                         interaction = interaction,
+                        creationBytecode = creationBytecode,
+                        constructorArgsHex = constructorArgsHex,
                         originalContractAddress = originalContractAddress,
+                        creationTx = creationTx
                     )
 
                     else -> handleProxyContract(
                         proxyInfo = proxyInfo,
                         interaction = interaction,
+                        creationBytecode = creationBytecode,
+                        constructorArgsHex = constructorArgsHex,
+                        creationTx = creationTx,
+                        originalContractAddress = originalContractAddress
                     )
                 }
             }
@@ -58,31 +75,121 @@ class ForkReplayService(
 
     private fun handleRegularContract(
         interaction: ExecutableInteraction,
+        creationBytecode: String,
+        constructorArgsHex: String,
         originalContractAddress: String,
+        creationTx: FullTransaction
     ): ReplayOutcome {
         val originalInteraction = interaction.copy(contractAddress = originalContractAddress)
 
-        // Impersonate original sender + fund it
+        // 1) Deploy optimized contract to get runtime bytecode with immutables initialized
+        val deployedRuntimeBytecode = deployAndGetInitializedRuntime(
+            creationBytecode = creationBytecode,
+            constructorArgsHex = constructorArgsHex,
+            creationTx = creationTx
+        )
+
+        // 2) Replace runtime bytecode at ORIGINAL address
+        anvilManager.replaceRuntimeBytecode(
+            address = originalContractAddress,
+            runtimeBytecode = deployedRuntimeBytecode
+        )
+
+        // 3) Impersonate sender + fund it (so tx can be mined)
         anvilManager.impersonateAccount(originalInteraction.fromAddress)
         anvilManager.setBalance(originalInteraction.fromAddress, BigInteger.TEN.pow(20))
 
+        // 4) Execute + measure against ORIGINAL address
         return executeAndMeasure(originalInteraction)
     }
 
 
+    /**
+     * Handle proxy contracts by deploying optimized implementation and updating proxy.
+     * All proxy-specific logic is delegated to ProxyDetectionService.
+     *
+     * (Kept exactly in spirit as you requested.)
+     */
     private fun handleProxyContract(
-        proxyInfo: de.orchestrator.gas_optimizer_orchestrator.model.ProxyInfo,
+        proxyInfo: ProxyInfo,
         interaction: ExecutableInteraction,
+        creationBytecode: String,
+        constructorArgsHex: String,
+        originalContractAddress: String,
+        creationTx: FullTransaction
     ): ReplayOutcome {
-        // Ensure we target the proxy address (original on-chain address)
-        val proxyAddress = proxyInfo.proxyAddress ?: interaction.contractAddress
-        val proxyInteraction = interaction.copy(contractAddress = proxyAddress)
+        println("🔗 Handling ${proxyInfo.proxyType} proxy")
 
-        // Impersonate original sender + fund it
-        anvilManager.impersonateAccount(proxyInteraction.fromAddress)
-        anvilManager.setBalance(proxyInteraction.fromAddress, BigInteger.TEN.pow(20))
+        // Deploy new implementation and update proxy via ProxyDetectionService
+        val result = proxyDetectionService.deployAndUpdateImplementation(
+            proxyInfo = proxyInfo,
+            creationBytecode = creationBytecode,
+            constructorArgsHex = constructorArgsHex,
+            deployerAddress = creationTx.from,
+            deployerValue = "0x" + creationTx.value.toString(16),
+            gasPrice = "0x" + creationTx.gasPrice.toString(16)
+        )
 
-        return executeAndMeasure(proxyInteraction)
+        return when {
+            result.isSuccess -> {
+                println("✅ Updated ${proxyInfo.proxyType} proxy with new implementation at ${result.getOrNull()}")
+
+                // Ensure sender can pay for gas on fork
+                anvilManager.impersonateAccount(interaction.fromAddress)
+                anvilManager.setBalance(interaction.fromAddress, BigInteger.TEN.pow(20))
+
+                executeAndMeasure(interaction)
+            }
+
+            else -> {
+                val exception = result.exceptionOrNull()
+                ReplayOutcome.Failed("Failed to update proxy: ${exception?.message ?: "Unknown error"}")
+            }
+        }
+    }
+
+    /**
+     * Deploys the given creation bytecode (with constructor args) so immutables are initialized,
+     * then returns the deployed runtime bytecode via eth_getCode.
+     */
+    private fun deployAndGetInitializedRuntime(
+        creationBytecode: String,
+        constructorArgsHex: String,
+        creationTx: FullTransaction
+    ): String {
+        BytecodeUtil.validateBytecode(creationBytecode)
+
+        val deployBytecode = BytecodeUtil.appendConstructorArgs(
+            bytecode = creationBytecode,
+            constructorArgsHex = constructorArgsHex
+        )
+
+        // deployer must exist + be funded on fork
+        anvilManager.impersonateAccount(creationTx.from)
+        anvilManager.setBalance(creationTx.from, BigInteger.TEN.pow(20))
+
+        val deployReceipt = anvilInteractionService.sendRawTransaction(
+            from = creationTx.from,
+            to = null,
+            value = creationTx.value,
+            gasLimit = anvilInteractionService.gasLimit(),
+            gasPrice = creationTx.gasPrice,
+            data = deployBytecode
+        )
+
+        val tempContractAddress = deployReceipt.contractAddress
+            ?: throw IllegalStateException("No contract address from deployment receipt")
+
+        val deployedRuntimeBytecode = web3j
+            .ethGetCode(tempContractAddress, DefaultBlockParameterName.LATEST)
+            .send()
+            .code
+
+        if (deployedRuntimeBytecode.isNullOrBlank() || deployedRuntimeBytecode == "0x") {
+            throw IllegalStateException("Failed to get deployed runtime bytecode for $tempContractAddress")
+        }
+
+        return deployedRuntimeBytecode
     }
 
     /**
