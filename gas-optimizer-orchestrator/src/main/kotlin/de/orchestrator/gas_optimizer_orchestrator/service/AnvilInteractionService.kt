@@ -78,7 +78,7 @@ class AnvilInteractionService(
             from = creationTx.from,
             to = null,
             value = creationTx.value,
-            gasLimit = gasLimit(),
+            gasLimit = BigInteger("10000000"),
             gasPrice = creationTx.gasPrice,
             data = bytecode
         )
