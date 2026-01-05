@@ -26,7 +26,7 @@ class AnvilInteractionService(
     private val txManager = RawTransactionManager(web3j, credentials)
 
     fun gasPrice(): BigInteger = gasProvider.gasPrice
-    fun gasLimit(): BigInteger = gasProvider.gasLimit
+    fun gasLimit(): BigInteger = BigInteger("10000000")
 
     /**
      * Deploys a raw bytecode string (0x prefixed) on a fresh non-forked Anvil.
@@ -78,7 +78,7 @@ class AnvilInteractionService(
             from = creationTx.from,
             to = null,
             value = creationTx.value,
-            gasLimit = BigInteger("10000000"),
+            gasLimit = gasLimit(),
             gasPrice = creationTx.gasPrice,
             data = bytecode
         )
@@ -163,14 +163,13 @@ class AnvilInteractionService(
         val to = interaction.contractAddress
         val value = interaction.value
 
-        val resolvedGasLimit = interaction.tx.gas.toBigIntegerOrNull() ?: gasLimit()
         val resolvedGasPrice = interaction.tx.gasPrice.toBigIntegerOrNull() ?: gasPrice()
 
         return sendRawTransaction(
             from = from,
             to = to,
             value = value,
-            gasLimit = resolvedGasLimit,
+            gasLimit = gasLimit(),
             gasPrice = resolvedGasPrice,
             data = encoded
         )
