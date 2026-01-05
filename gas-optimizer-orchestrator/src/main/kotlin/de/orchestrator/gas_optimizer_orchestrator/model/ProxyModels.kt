@@ -11,13 +11,12 @@ enum class ProxyType {
 
 data class ProxyInfo(
     val proxyType: ProxyType,
+    val proxyAddress: String? = null,
     val implementationAddress: String? = null,
-    val beaconAddress: String? = null,
-    val adminAddress: String? = null,
-    val needsDelegatecallHandling: Boolean = true,
     val implementationSlot: String? = null,
+    val beaconAddress: String? = null,
     val beaconImplSlot: String? = null,
-    val isUpgradable: Boolean = true
+    val needsDelegatecallHandling: Boolean = false
 )
 
 object ProxyConstants {

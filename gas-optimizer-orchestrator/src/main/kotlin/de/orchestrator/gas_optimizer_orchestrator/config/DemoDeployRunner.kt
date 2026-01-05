@@ -22,7 +22,7 @@ class DemoDeployConfig(
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        val target = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+        val target = "0xc2EdaD668740f1aA35E4D8f227fB8E17dcA888Cd"
 
         val creationInfo = etherScanService.getContractCreationInfo(target)
         val creationTransaction = etherScanService.getTransactionByHash(creationInfo.txHash)

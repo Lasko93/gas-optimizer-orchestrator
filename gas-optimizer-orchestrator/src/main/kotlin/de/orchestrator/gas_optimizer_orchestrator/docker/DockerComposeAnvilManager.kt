@@ -170,27 +170,29 @@ class DockerComposeAnvilManager(
         return match.groupValues[1]
     }
 
-    /**
-     * Copy storage from source address to destination address.
-     * Uses a heuristic to copy the most commonly used storage slots.
-     *
-     * @param maxSlots Maximum number of storage slots to copy (default: 100)
-     */
-    fun copyStorage(fromAddress: String, toAddress: String, maxSlots: Int = 100) {
-        println("Copying storage from $fromAddress to $toAddress (checking $maxSlots slots)...")
-        var copiedCount = 0
 
-        for (i in 0 until maxSlots) {
-            val slot = "0x" + i.toString(16).padStart(64, '0')
-            val value = getStorageAt(fromAddress, slot)
+    fun getCode(address: String): String {
+        require(address.startsWith("0x")) { "Address must start with 0x" }
 
-            // Only copy non-zero values to reduce RPC calls
-            if (value != "0x0" && value != "0x" + "0".padStart(64, '0')) {
-                setStorageAt(toAddress, slot, value)
-                copiedCount++
-            }
+        val payload = """
+        {
+          "jsonrpc":"2.0",
+          "id":1,
+          "method":"eth_getCode",
+          "params":["$address","latest"]
+        }
+    """.trimIndent()
+
+        val resp = docker.postJson(rpcUrl, payload)
+
+        if (resp.code != 200) {
+            throw IllegalStateException("Failed to get code: HTTP ${resp.code}\n${resp.body}")
         }
 
-        println("✔ Copied $copiedCount storage slots from $fromAddress to $toAddress")
+        val resultRegex = """"result"\s*:\s*"(0x[0-9a-fA-F]*)"""".toRegex()
+        val match = resultRegex.find(resp.body)
+            ?: throw IllegalStateException("Could not parse code from response: ${resp.body}")
+
+        return match.groupValues[1]
     }
 }

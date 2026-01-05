@@ -3,7 +3,6 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import de.orchestrator.gas_optimizer_orchestrator.model.FullTransaction
-import de.orchestrator.gas_optimizer_orchestrator.model.ProxyInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.ProxyType
 import de.orchestrator.gas_optimizer_orchestrator.model.ReplayOutcome
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
@@ -21,16 +20,6 @@ class ForkReplayService(
     private val proxyDetectionService: ProxyDetectionService
 ) {
 
-    /**
-     * Replay interaction using bytecode replacement at original address.
-     * Enhanced to handle proxy contracts by delegating to ProxyDetectionService.
-     *
-     * Flow:
-     * 1. Detect if handling proxy or regular contract
-     * 2. For proxies: Deploy optimized implementation and update proxy via ProxyDetectionService
-     * 3. For regular contracts: Replace bytecode directly
-     * 4. Execute transaction and measure gas usage
-     */
     fun replayWithCustomContract(
         interaction: ExecutableInteraction,
         creationBytecode: String,
@@ -48,21 +37,17 @@ class ForkReplayService(
 
         return try {
             anvilManager.withAnvilFork(forkBlock, interaction.tx.timeStamp) {
-                println("📋 Starting replay for contract at $originalContractAddress")
-
-                // 1. Detect proxy type first
                 val proxyInfo = proxyDetectionService.detectProxyType(originalContractAddress)
-                println("🔍 Detected proxy type: ${proxyInfo.proxyType} for $originalContractAddress")
 
-                // 2. Handle based on contract type
                 when (proxyInfo.proxyType) {
                     ProxyType.NONE -> handleRegularContract(
-                        interaction, creationBytecode, constructorArgsHex,
-                        originalContractAddress, creationTx
+                        interaction = interaction,
+                        originalContractAddress = originalContractAddress,
                     )
+
                     else -> handleProxyContract(
-                        proxyInfo, interaction, creationBytecode, constructorArgsHex,
-                        originalContractAddress, creationTx
+                        proxyInfo = proxyInfo,
+                        interaction = interaction,
                     )
                 }
             }
@@ -71,112 +56,43 @@ class ForkReplayService(
         }
     }
 
-    /**
-     * Handle regular (non-proxy) contracts using direct bytecode replacement.
-     * This is the traditional approach for regular contracts.
-     */
     private fun handleRegularContract(
         interaction: ExecutableInteraction,
-        creationBytecode: String,
-        constructorArgsHex: String,
         originalContractAddress: String,
-        creationTx: FullTransaction
     ): ReplayOutcome {
-        println("📝 Handling regular contract")
+        val originalInteraction = interaction.copy(contractAddress = originalContractAddress)
 
-        // Deploy the new optimized contract to get runtime bytecode
-        BytecodeUtil.validateBytecode(creationBytecode)
-        val deployBytecode = BytecodeUtil.appendConstructorArgs(creationBytecode, constructorArgsHex)
+        // Impersonate original sender + fund it
+        anvilManager.impersonateAccount(originalInteraction.fromAddress)
+        anvilManager.setBalance(originalInteraction.fromAddress, BigInteger.TEN.pow(20))
 
-        // Set up deployment
-        anvilManager.impersonateAccount(creationTx.from)
-        anvilManager.setBalance(creationTx.from, BigInteger.TEN.pow(20))
-
-        val deployReceipt = anvilInteractionService.sendRawTransaction(
-            from = creationTx.from,
-            to = null,
-            value = creationTx.value,
-            gasLimit = anvilInteractionService.gasLimit(),
-            gasPrice = creationTx.gasPrice,
-            data = deployBytecode
-        )
-
-        val tempContractAddress = deployReceipt.contractAddress
-            ?: return ReplayOutcome.Failed("No contract address from deployment")
-
-        // Get the runtime bytecode with immutables initialized
-        val deployedRuntimeBytecode = web3j.ethGetCode(tempContractAddress, DefaultBlockParameterName.LATEST)
-            .send()
-            .code
-
-        if (deployedRuntimeBytecode.isNullOrBlank() || deployedRuntimeBytecode == "0x") {
-            return ReplayOutcome.Failed("Failed to get deployed runtime bytecode")
-        }
-
-        // Replace bytecode at the contract address
-        anvilManager.replaceRuntimeBytecode(
-            address = originalContractAddress,
-            runtimeBytecode = deployedRuntimeBytecode
-        )
-
-        // Reset any reentrancy guards
-        proxyDetectionService.resetReentrancyGuard(originalContractAddress)
-
-        println("✅ Updated regular contract at $originalContractAddress")
-        return executeAndMeasure(interaction, "Regular Contract")
+        return executeAndMeasure(originalInteraction)
     }
 
-    /**
-     * Handle proxy contracts by deploying optimized implementation and updating proxy.
-     * All proxy-specific logic is delegated to ProxyDetectionService.
-     */
+
     private fun handleProxyContract(
-        proxyInfo: ProxyInfo,
+        proxyInfo: de.orchestrator.gas_optimizer_orchestrator.model.ProxyInfo,
         interaction: ExecutableInteraction,
-        creationBytecode: String,
-        constructorArgsHex: String,
-        originalContractAddress: String,
-        creationTx: FullTransaction
     ): ReplayOutcome {
-        println("🔗 Handling ${proxyInfo.proxyType} proxy")
+        // Ensure we target the proxy address (original on-chain address)
+        val proxyAddress = proxyInfo.proxyAddress ?: interaction.contractAddress
+        val proxyInteraction = interaction.copy(contractAddress = proxyAddress)
 
-        // Deploy new implementation and update proxy via ProxyDetectionService
-        val result = proxyDetectionService.deployAndUpdateImplementation(
-            proxyInfo = proxyInfo,
-            creationBytecode = creationBytecode,
-            constructorArgsHex = constructorArgsHex,
-            deployerAddress = creationTx.from,
-            deployerValue = "0x" + creationTx.value.toString(16),
-            gasPrice = "0x" + creationTx.gasPrice.toString(16)
-        )
+        // Impersonate original sender + fund it
+        anvilManager.impersonateAccount(proxyInteraction.fromAddress)
+        anvilManager.setBalance(proxyInteraction.fromAddress, BigInteger.TEN.pow(20))
 
-        return when {
-            result.isSuccess -> {
-                println("✅ Updated ${proxyInfo.proxyType} proxy with new implementation at ${result.getOrNull()}")
-                executeAndMeasure(interaction, "${proxyInfo.proxyType} Proxy")
-            }
-            else -> {
-                val exception = result.exceptionOrNull()
-                ReplayOutcome.Failed("Failed to update proxy: ${exception?.message ?: "Unknown error"}")
-            }
-        }
+        return executeAndMeasure(proxyInteraction)
     }
 
     /**
-     * Common execution logic for both proxy and regular contracts.
-     * Simulates, executes, and measures gas usage.
+     * Execute transaction and measure gas.
      */
-    private fun executeAndMeasure(interaction: ExecutableInteraction, contractType: String): ReplayOutcome {
-        // Simulate first
+    private fun executeAndMeasure(interaction: ExecutableInteraction): ReplayOutcome {
         val revertReason = simulateCall(interaction)
 
-        // Execute transaction
         val receipt = anvilInteractionService.sendInteraction(interaction)
         val gasUsed = receipt.gasUsed
-
-        println("🚀 Executed $contractType interaction - Gas: $gasUsed, Status: ${
-            if (receipt.status == "0x1") "SUCCESS" else "REVERTED"
-        }")
 
         return if (receipt.status == "0x1") {
             ReplayOutcome.Success(receipt, gasUsed)
@@ -216,8 +132,8 @@ class ForkReplayService(
         if (revertReason.isNullOrBlank()) return null
 
         return try {
+            // Error(string) selector 0x08c379a0
             if (revertReason.startsWith("0x08c379a0")) {
-                // Standard Error(string) selector
                 val hex = revertReason.removePrefix("0x08c379a0")
                 if (hex.length >= 128) {
                     val lengthHex = hex.substring(64, 128)
@@ -230,7 +146,7 @@ class ForkReplayService(
             } else {
                 revertReason
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             revertReason
         }
     }

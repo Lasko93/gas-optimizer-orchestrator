@@ -8,52 +8,203 @@ import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import org.springframework.stereotype.Service
 import java.math.BigInteger
 
-/**
- * Service for detecting proxy contracts and managing proxy implementations.
- * Handles all proxy-specific logic including deployment and storage management.
- */
 @Service
 class ProxyDetectionService(
     private val anvilManager: DockerComposeAnvilManager,
     private val anvilInteractionService: AnvilInteractionService
 ) {
     companion object {
-        private val SLOT_TWO = "0x0000000000000000000000000000000000000000000000000000000000000002"
-        private val ZERO_VALUE = "0x" + "0".repeat(64)
+        private const val ZERO_VALUE = "0x0000000000000000000000000000000000000000000000000000000000000000"
+        private const val ZERO_SHORT = "0x0"
+
+        // Compound uses slot 2 for implementation
+        private const val COMPOUND_IMPL_SLOT = "0x0000000000000000000000000000000000000000000000000000000000000002"
+
+        // Maximum bytecode size for a proxy (proxies are small, typically < 1KB)
+        private const val MAX_PROXY_BYTECODE_SIZE = 2000
+
+        // Minimum implementation bytecode size (should have actual code)
+        private const val MIN_IMPLEMENTATION_SIZE = 100
+
+        // DELEGATECALL opcode
+        private const val DELEGATECALL_OPCODE = "f4"
     }
 
     /**
      * Detects if a contract is a proxy and what type it is.
-     * Enriches the returned ProxyInfo with implementation slots and other proxy-specific data.
+     * Uses multiple heuristics to avoid false positives.
      */
     fun detectProxyType(contractAddress: String): ProxyInfo {
-        val cleanAddress = contractAddress.lowercase()
+        val cleanAddress = cleanAddress(contractAddress)
 
-        // Try EIP-1967 first (most common)
-        val eip1967Result = checkEIP1967Pattern(cleanAddress)
+        // Get contract bytecode for analysis
+        val contractBytecode = try {
+            anvilManager.getCode(cleanAddress)
+        } catch (e: Exception) {
+            println("⚠️ Could not fetch bytecode for $cleanAddress: ${e.message}")
+            return ProxyInfo(ProxyType.NONE)
+        }
+
+        // If contract has no code, it's not a proxy
+        if (isEmptyBytecode(contractBytecode)) {
+            return ProxyInfo(ProxyType.NONE)
+        }
+
+        // Try EIP-1967 first (most common and most reliable)
+        val eip1967Result = checkEIP1967Pattern(cleanAddress, contractBytecode)
         if (eip1967Result.proxyType != ProxyType.NONE) {
-            return enrichProxyInfo(eip1967Result.proxyType, eip1967Result.implementationAddress)
+            println("✅ Detected EIP-1967 proxy at $cleanAddress -> ${eip1967Result.implementationAddress}")
+            return enrichProxyInfo(
+                proxyType = eip1967Result.proxyType,
+                proxyAddress = cleanAddress,
+                implementationAddress = eip1967Result.implementationAddress
+            )
         }
 
         // Try Beacon proxy
-        val beaconResult = checkBeaconPattern(cleanAddress)
+        val beaconResult = checkBeaconPattern(cleanAddress, contractBytecode)
         if (beaconResult.proxyType != ProxyType.NONE) {
-            return enrichProxyInfo(beaconResult.proxyType, null, beaconResult.beaconAddress)
+            println("✅ Detected Beacon proxy at $cleanAddress, beacon: ${beaconResult.beaconAddress}")
+            return enrichProxyInfo(
+                proxyType = beaconResult.proxyType,
+                proxyAddress = cleanAddress,
+                implementationAddress = beaconResult.implementationAddress,
+                beaconAddress = beaconResult.beaconAddress
+            )
         }
 
-        // Try Compound-style proxy
-        val compoundResult = checkCompoundPattern(cleanAddress)
+        // Try Compound-style proxy (with strict validation)
+        val compoundResult = checkCompoundPattern(cleanAddress, contractBytecode)
         if (compoundResult.proxyType != ProxyType.NONE) {
-            return enrichProxyInfo(compoundResult.proxyType, compoundResult.implementationAddress)
+            println("✅ Detected Compound proxy at $cleanAddress -> ${compoundResult.implementationAddress}")
+            return enrichProxyInfo(
+                proxyType = compoundResult.proxyType,
+                proxyAddress = cleanAddress,
+                implementationAddress = compoundResult.implementationAddress
+            )
         }
 
+        // Not a recognized proxy pattern
         return ProxyInfo(ProxyType.NONE)
     }
 
     /**
-     * Deploys new implementation contract and updates proxy to use it.
-     * This is the main method that handles all proxy updates.
+     * Check for EIP-1967 proxy pattern.
+     * This is the most reliable pattern as it uses a specific storage slot.
      */
+    private fun checkEIP1967Pattern(address: String, bytecode: String): CheckResult {
+        val implSlotValue = getStorageSafe(address, ProxyConstants.EIP1967_IMPLEMENTATION_SLOT)
+
+        if (isEmptySlot(implSlotValue)) {
+            return CheckResult(ProxyType.NONE)
+        }
+
+        val implAddress = extractAddressFromSlot(implSlotValue)
+            ?: return CheckResult(ProxyType.NONE)
+
+        // Validate that implementation actually has code
+        if (!hasCode(implAddress)) {
+            println("⚠️ EIP-1967 slot points to address without code: $implAddress")
+            return CheckResult(ProxyType.NONE)
+        }
+
+        return CheckResult(ProxyType.EIP1967, implementationAddress = implAddress)
+    }
+
+    /**
+     * Check for Beacon proxy pattern.
+     */
+    private fun checkBeaconPattern(address: String, bytecode: String): CheckResult {
+        val beaconSlotValue = getStorageSafe(address, ProxyConstants.EIP1967_BEACON_SLOT)
+
+        if (isEmptySlot(beaconSlotValue)) {
+            return CheckResult(ProxyType.NONE)
+        }
+
+        val beaconAddress = extractAddressFromSlot(beaconSlotValue)
+            ?: return CheckResult(ProxyType.NONE)
+
+        // Validate beacon has code
+        if (!hasCode(beaconAddress)) {
+            println("⚠️ Beacon slot points to address without code: $beaconAddress")
+            return CheckResult(ProxyType.NONE)
+        }
+
+        // Try to get implementation from beacon
+        val beaconImplSlot = getStorageSafe(beaconAddress, ProxyConstants.EIP1967_IMPLEMENTATION_SLOT)
+        val implAddress = if (!isEmptySlot(beaconImplSlot)) {
+            extractAddressFromSlot(beaconImplSlot)
+        } else {
+            null
+        }
+
+        return CheckResult(ProxyType.BEACON, beaconAddress = beaconAddress, implementationAddress = implAddress)
+    }
+
+    /**
+     * Check for Compound-style proxy pattern.
+     * This pattern stores implementation address in slot 2.
+     *
+     * IMPORTANT: This has high false-positive potential, so we apply strict validation:
+     * 1. Contract bytecode must be small (proxies are minimal)
+     * 2. Contract must contain DELEGATECALL opcode
+     * 3. Implementation address must have code
+     * 4. Implementation must be larger than proxy
+     */
+    private fun checkCompoundPattern(address: String, bytecode: String): CheckResult {
+        val slotTwoValue = getStorageSafe(address, COMPOUND_IMPL_SLOT)
+
+        if (isEmptySlot(slotTwoValue)) {
+            return CheckResult(ProxyType.NONE)
+        }
+
+        // Check if value looks like a padded address
+        if (!looksLikePaddedAddress(slotTwoValue)) {
+            return CheckResult(ProxyType.NONE)
+        }
+
+        val potentialImplAddress = extractAddressFromSlot(slotTwoValue)
+            ?: return CheckResult(ProxyType.NONE)
+
+        // STRICT VALIDATION to avoid false positives like MasterChef
+
+        // 1. Check proxy bytecode size - must be small
+        val proxyCodeSize = getBytecodeSize(bytecode)
+        if (proxyCodeSize > MAX_PROXY_BYTECODE_SIZE) {
+            // Contract is too large to be a simple proxy
+            return CheckResult(ProxyType.NONE)
+        }
+
+        // 2. Check for DELEGATECALL opcode in proxy bytecode
+        if (!containsDelegatecall(bytecode)) {
+            // No DELEGATECALL = not a proxy
+            return CheckResult(ProxyType.NONE)
+        }
+
+        // 3. Check that implementation has code
+        if (!hasCode(potentialImplAddress)) {
+            return CheckResult(ProxyType.NONE)
+        }
+
+        // 4. Implementation should be larger than proxy
+        val implBytecode = try {
+            anvilManager.getCode(potentialImplAddress)
+        } catch (e: Exception) {
+            return CheckResult(ProxyType.NONE)
+        }
+
+        val implCodeSize = getBytecodeSize(implBytecode)
+        if (implCodeSize <= proxyCodeSize) {
+            // Implementation should have more code than the proxy
+            return CheckResult(ProxyType.NONE)
+        }
+
+        // All checks passed - this is likely a Compound proxy
+        return CheckResult(ProxyType.COMPOUND, implementationAddress = potentialImplAddress)
+    }
+
+    // ===== Deployment and Update Methods =====
+
     fun deployAndUpdateImplementation(
         proxyInfo: ProxyInfo,
         creationBytecode: String,
@@ -63,19 +214,19 @@ class ProxyDetectionService(
         gasPrice: String
     ): Result<String> {
         try {
-            println("Deploying new implementation for ${proxyInfo.proxyType} proxy")
+            println("📦 Deploying new implementation for ${proxyInfo.proxyType} proxy")
+            println("   Proxy address: ${proxyInfo.proxyAddress}")
+            println("   Current implementation: ${proxyInfo.implementationAddress}")
 
-            // Deploy the new implementation contract
             val deployBytecode = BytecodeUtil.appendConstructorArgs(creationBytecode, constructorArgsHex)
 
-            // Set up deployer for transaction
             anvilManager.impersonateAccount(deployerAddress)
-            anvilManager.setBalance(deployerAddress, java.math.BigInteger("100000000000000000000"))
+            anvilManager.setBalance(deployerAddress, BigInteger("100000000000000000000"))
 
             val deployReceipt = anvilInteractionService.sendRawTransaction(
                 from = deployerAddress,
                 to = null,
-                value = BigInteger(deployerValue.removePrefix("0x"), 16),
+                value = BigInteger.ZERO,
                 gasLimit = anvilInteractionService.gasLimit(),
                 gasPrice = BigInteger(gasPrice.removePrefix("0x"), 16),
                 data = deployBytecode
@@ -84,13 +235,10 @@ class ProxyDetectionService(
             val newImplAddress = deployReceipt.contractAddress
                 ?: return Result.failure(IllegalStateException("No contract address from deployment"))
 
-            println("Deployed new implementation at: $newImplAddress")
+            println("   ✅ New implementation deployed at: $newImplAddress")
 
-            // Update proxy to use the new implementation
             updateProxyImplementation(proxyInfo, newImplAddress)
-
-            // Reset reentrancy guard on the new implementation
-            resetReentrancyGuard(newImplAddress)
+            proxyInfo.proxyAddress?.let { resetReentrancyGuard(it) }
 
             return Result.success(newImplAddress)
 
@@ -99,82 +247,73 @@ class ProxyDetectionService(
         }
     }
 
-    /**
-     * Updates existing proxy to use new implementation without deploying.
-     */
-    private fun updateProxyImplementation(
-        proxyInfo: ProxyInfo,
-        newImplementationAddress: String
-    ) {
+    private fun updateProxyImplementation(proxyInfo: ProxyInfo, newImplementationAddress: String) {
         val implSlot = requireNotNull(proxyInfo.implementationSlot) {
             "No implementation slot defined for proxy type ${proxyInfo.proxyType}"
         }
 
-        val proxyAddress = requireNotNull(proxyInfo.implementationAddress) {
+        val proxyAddress = requireNotNull(proxyInfo.proxyAddress) {
             "Cannot update proxy without proxy address"
         }
 
-        // Format the new implementation address (padded to 32 bytes).
-        val implSlotValue = "0x" + "0".repeat(24) + newImplementationAddress.substring(2).lowercase()
+        val implSlotValue = "0x" + "0".repeat(24) + newImplementationAddress.removePrefix("0x").lowercase()
 
         when (proxyInfo.proxyType) {
             ProxyType.EIP1967 -> {
                 anvilManager.setStorageAt(proxyAddress, implSlot, implSlotValue)
-                if (proxyInfo.beaconAddress != null) {
-                    // It's a beacon proxy, update the beacon's implementation
-                    val beaconSlotValue = "0x" + "0".repeat(24) + newImplementationAddress.substring(2).lowercase()
-                    val beaconImplSlot = requireNotNull(proxyInfo.beaconImplSlot)
-                    anvilManager.setStorageAt(proxyInfo.beaconAddress, beaconImplSlot, beaconSlotValue)
-                    println("Updated beacon implementation at ${proxyInfo.beaconAddress}")
-                }
-                println("Updated EIP-1967 implementation slot for proxy $proxyAddress")
+                println("   ✅ Updated EIP-1967 proxy $proxyAddress -> $newImplementationAddress")
             }
             ProxyType.BEACON -> {
-                require(proxyInfo.beaconAddress != null) { "Beacon proxy must have beacon address" }
-                // Update beacon's implementation
-                val beaconSlotValue = "0x" + "0".repeat(24) + newImplementationAddress.substring(2).lowercase()
+                val beaconAddress = requireNotNull(proxyInfo.beaconAddress) {
+                    "Beacon proxy must have beacon address"
+                }
                 val beaconImplSlot = requireNotNull(proxyInfo.beaconImplSlot)
-                anvilManager.setStorageAt(proxyInfo.beaconAddress, beaconImplSlot, beaconSlotValue)
-                println("Updated beacon implementation at ${proxyInfo.beaconAddress}")
+                anvilManager.setStorageAt(beaconAddress, beaconImplSlot, implSlotValue)
+                println("   ✅ Updated beacon $beaconAddress -> $newImplementationAddress")
             }
             ProxyType.COMPOUND -> {
                 anvilManager.setStorageAt(proxyAddress, implSlot, implSlotValue)
-                println("Updated Compound implementation at slot 2 for proxy $proxyAddress")
+                println("   ✅ Updated Compound proxy $proxyAddress -> $newImplementationAddress")
             }
-            else -> return
+            else -> {
+                println("   ⚠️ Unknown proxy type ${proxyInfo.proxyType}, skipping update")
+            }
         }
     }
 
-    /**
-     * Resets reentrancy guard for an implementation contract.
-     */
-    fun resetReentrancyGuard(implementationAddress: String) {
+    fun resetReentrancyGuard(contractAddress: String) {
         try {
-            // Try common reentrancy guard slots
             for (slotIndex in 0..4) {
                 try {
-                    anvilManager.resetReentrancyGuard(implementationAddress, slotIndex)
+                    anvilManager.resetReentrancyGuard(contractAddress, slotIndex)
                 } catch (e: Exception) {
                     // Slot might not exist, which is OK
                 }
             }
         } catch (e: Exception) {
-            println("Warning: Could not reset reentrancy guard for $implementationAddress: ${e.message}")
+            println("   ⚠️ Could not reset reentrancy guard for $contractAddress: ${e.message}")
         }
     }
 
-    // ===== Proxy Type Detection Methods =====
+    // ===== Helper Methods =====
 
-    private fun enrichProxyInfo(proxyType: ProxyType, implementationAddress: String?, beaconAddress: String? = null): ProxyInfo {
+    private fun enrichProxyInfo(
+        proxyType: ProxyType,
+        proxyAddress: String,
+        implementationAddress: String?,
+        beaconAddress: String? = null
+    ): ProxyInfo {
         return when (proxyType) {
             ProxyType.EIP1967 -> ProxyInfo(
                 proxyType = proxyType,
+                proxyAddress = proxyAddress,
                 implementationAddress = implementationAddress,
                 implementationSlot = ProxyConstants.EIP1967_IMPLEMENTATION_SLOT,
                 needsDelegatecallHandling = true
             )
             ProxyType.BEACON -> ProxyInfo(
                 proxyType = proxyType,
+                proxyAddress = proxyAddress,
                 beaconAddress = beaconAddress,
                 implementationAddress = implementationAddress,
                 implementationSlot = ProxyConstants.EIP1967_IMPLEMENTATION_SLOT,
@@ -183,8 +322,9 @@ class ProxyDetectionService(
             )
             ProxyType.COMPOUND -> ProxyInfo(
                 proxyType = proxyType,
+                proxyAddress = proxyAddress,
                 implementationAddress = implementationAddress,
-                implementationSlot = SLOT_TWO,
+                implementationSlot = COMPOUND_IMPL_SLOT,
                 needsDelegatecallHandling = true
             )
             else -> ProxyInfo(ProxyType.NONE)
@@ -197,54 +337,86 @@ class ProxyDetectionService(
         val beaconAddress: String? = null
     )
 
-    private fun checkEIP1967Pattern(address: String): CheckResult {
-        val implSlotValue = anvilManager.getStorageAt(address, ProxyConstants.EIP1967_IMPLEMENTATION_SLOT)
-        return if (implSlotValue.isNotEmpty() && implSlotValue != ZERO_VALUE && implSlotValue != "0x0") {
-            val implAddress = extractAddressFromSlot(implSlotValue)
-            CheckResult(ProxyType.EIP1967, implementationAddress = implAddress)
-        } else {
-            CheckResult(ProxyType.NONE)
+    // ===== Utility Methods =====
+
+    private fun cleanAddress(address: String): String {
+        return address.lowercase().trim()
+    }
+
+    private fun getStorageSafe(address: String, slot: String): String {
+        return try {
+            anvilManager.getStorageAt(address, slot)
+        } catch (e: Exception) {
+            ""
         }
     }
 
-    private fun checkBeaconPattern(address: String): CheckResult {
-        val beaconSlotValue = anvilManager.getStorageAt(address, ProxyConstants.EIP1967_BEACON_SLOT)
-        return if (beaconSlotValue.isNotEmpty() && beaconSlotValue != ZERO_VALUE && beaconSlotValue != "0x0") {
-            val beaconAddress = extractAddressFromSlot(beaconSlotValue)
-            CheckResult(ProxyType.BEACON, beaconAddress = beaconAddress)
-        } else {
-            CheckResult(ProxyType.NONE)
-        }
+    private fun isEmptySlot(slotValue: String): Boolean {
+        if (slotValue.isBlank()) return true
+        val normalized = slotValue.lowercase()
+        return normalized == ZERO_VALUE.lowercase() ||
+                normalized == ZERO_SHORT ||
+                normalized == "0x"
     }
 
-    private fun checkCompoundPattern(address: String): CheckResult {
-        val slotTwoValue = anvilManager.getStorageAt(address, SLOT_TWO)
-        return if (isPotentialCompoundProxy(slotTwoValue)) {
-            val implAddress = extractAddressFromSlot(slotTwoValue)
-            CheckResult(ProxyType.COMPOUND, implementationAddress = implAddress)
-        } else {
-            CheckResult(ProxyType.NONE)
+    private fun isEmptyBytecode(bytecode: String): Boolean {
+        if (bytecode.isBlank()) return true
+        val normalized = bytecode.lowercase()
+        return normalized == "0x" || normalized == "0x0" || normalized.length <= 4
+    }
+
+    private fun hasCode(address: String): Boolean {
+        val code = try {
+            anvilManager.getCode(address)
+        } catch (e: Exception) {
+            return false
         }
+        return !isEmptyBytecode(code) && getBytecodeSize(code) >= MIN_IMPLEMENTATION_SIZE
+    }
+
+    private fun getBytecodeSize(bytecode: String): Int {
+        val hex = bytecode.removePrefix("0x")
+        return hex.length / 2
+    }
+
+    private fun containsDelegatecall(bytecode: String): Boolean {
+        // DELEGATECALL opcode is 0xf4
+        return bytecode.lowercase().removePrefix("0x").contains(DELEGATECALL_OPCODE)
+    }
+
+    private fun looksLikePaddedAddress(slotValue: String): Boolean {
+        val normalized = slotValue.lowercase().removePrefix("0x").padStart(64, '0')
+
+        // First 24 characters should be zeros (12 bytes of padding)
+        val padding = normalized.substring(0, 24)
+        if (padding != "0".repeat(24)) {
+            return false
+        }
+
+        // Last 40 characters should be a valid address
+        val addressPart = normalized.substring(24)
+        return isValidEthereumAddress(addressPart)
     }
 
     private fun extractAddressFromSlot(slotValue: String): String? {
-        if (slotValue.length < 42) return null
-        return "0x" + slotValue.substring(slotValue.length - 40).lowercase()
-    }
+        val normalized = slotValue.lowercase().removePrefix("0x").padStart(64, '0')
+        val addressPart = normalized.substring(normalized.length - 40)
 
-    private fun isPotentialCompoundProxy(slotValue: String): Boolean {
-        if (slotValue.length < 42) return false
-        if (slotValue == ZERO_VALUE || slotValue == "0x0") return false
-        return isValidEthereumAddress(slotValue.substring(slotValue.length - 40))
+        if (!isValidEthereumAddress(addressPart)) {
+            return null
+        }
+
+        // Don't return zero address
+        if (addressPart == "0".repeat(40)) {
+            return null
+        }
+
+        return "0x$addressPart"
     }
 
     private fun isValidEthereumAddress(address: String): Boolean {
         if (address.length != 40) return false
-        return try {
-            address.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
-        } catch (e: Exception) {
-            false
-        }
+        return address.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }
     }
 
     fun isProxy(contractAddress: String): Boolean {
