@@ -18,10 +18,11 @@ class DemoDeployConfig(
     private val slitherOrchestrator: SlitherOrchestrator
 ) {
 
+    //TODO: Fix all errors with 0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B --> ProxyImplementations // 0x1111111254EEB25477B68fb85Ed929f73A960582 --> max fee per gas less than
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        val target = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+        val target = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
 
         val creationInfo = etherScanService.getContractCreationInfo(target)
         val creationTransaction = etherScanService.getTransactionByHash(creationInfo.txHash)

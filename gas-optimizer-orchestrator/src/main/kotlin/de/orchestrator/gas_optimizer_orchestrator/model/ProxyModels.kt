@@ -14,7 +14,10 @@ data class ProxyInfo(
     val implementationAddress: String? = null,
     val beaconAddress: String? = null,
     val adminAddress: String? = null,
-    val needsDelegatecallHandling: Boolean = true
+    val needsDelegatecallHandling: Boolean = true,
+    val implementationSlot: String? = null,
+    val beaconImplSlot: String? = null,
+    val isUpgradable: Boolean = true
 )
 
 object ProxyConstants {
