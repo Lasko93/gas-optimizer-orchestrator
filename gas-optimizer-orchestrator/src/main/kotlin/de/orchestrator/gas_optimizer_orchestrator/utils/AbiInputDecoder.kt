@@ -16,6 +16,20 @@ import java.math.BigInteger
 object AbiInputDecoder {
 
     // ------------------------------------------------------------
+    // STATIC BYTES TYPE DETECTION
+    // ------------------------------------------------------------
+    private val STATIC_BYTES_REGEX = Regex("^bytes([1-9]|[12][0-9]|3[0-2])$")
+
+    private fun isStaticBytes(type: String): Boolean {
+        return STATIC_BYTES_REGEX.matches(type)
+    }
+
+    private fun extractBytesSize(type: String): Int? {
+        val match = STATIC_BYTES_REGEX.find(type)
+        return match?.groupValues?.get(1)?.toInt()
+    }
+
+    // ------------------------------------------------------------
     // SELECTOR BUILDER
     // ------------------------------------------------------------
     fun selectorFromAbi(fn: JsonNode): String {
@@ -74,12 +88,15 @@ object AbiInputDecoder {
             type.startsWith("uint") || type.startsWith("int") ->
                 BigInteger(slot, 16)
 
-            type.startsWith("bytes") && !type.endsWith("[]") -> {
-                Numeric.hexStringToByteArray("0x$slot")
+            isStaticBytes(type) -> {
+                val fullSlot = Numeric.hexStringToByteArray("0x$slot")
+                val size = extractBytesSize(type)!!
+                // Static bytes are left-aligned, truncate to actual size
+                fullSlot.copyOfRange(0, size)
             }
 
             // dynamic: string, bytes, arrays, tuple
-            type == "string" || type == "bytes" ||
+            type == "string" || (type == "bytes") ||
                     type.endsWith("[]") || type.startsWith("tuple") ->
                 decodeDynamic(type, slot, fullData, abiNode)
 
