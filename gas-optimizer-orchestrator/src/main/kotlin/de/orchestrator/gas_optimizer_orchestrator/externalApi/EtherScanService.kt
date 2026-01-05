@@ -59,11 +59,6 @@ class EtherScanService(
         val isProxy = entry["Proxy"]?.asText() == "1"
         val impl = entry["Implementation"]?.asText()
 
-        if (isProxy && !impl.isNullOrBlank()) {
-            println("Proxy detected → following implementation $impl")
-            return getContractSourceCode(impl, chainId)
-        }
-
         val rawSourceField = optionalText(entry, "SourceCode")
         if (rawSourceField.isBlank()) {
             throw EtherScanException("0", "Contract has no verified source code on Etherscan")
@@ -79,6 +74,11 @@ class EtherScanService(
             emptyList()
         }
 
+        // If it's a proxy with implementation, log it but don't auto-follow
+        if (isProxy && !impl.isNullOrBlank()) {
+            println("Proxy detected at $trimmedAddress → implementation: $impl")
+        }
+
         return ContractSourceCodeResult(
             address = trimmedAddress,
             contractName = optionalText(entry, "ContractName"),
@@ -89,7 +89,9 @@ class EtherScanService(
             sourceCode = normalizedSource,
             isStandardJsonInput = isStandardJson,
             constructorArgumentsHex = optionalText(entry, "ConstructorArguments"),
-            remappings = remappings
+            remappings = remappings,
+            isProxy = isProxy,
+            implementationAddress = impl
         )
     }
 

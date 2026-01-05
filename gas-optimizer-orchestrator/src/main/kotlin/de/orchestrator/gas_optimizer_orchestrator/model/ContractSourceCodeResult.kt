@@ -10,5 +10,7 @@ data class ContractSourceCodeResult(
     val sourceCode: String,          // normalized SourceCode (double-braces stripped)
     val isStandardJsonInput: Boolean, // true if SourceCode is Solidity standard-json-input
     val constructorArgumentsHex: String,
-    val remappings: List<String> = emptyList()
+    val remappings: List<String> = emptyList(),
+    val isProxy: Boolean = false,
+    val implementationAddress: String? = null,
 )
