@@ -19,23 +19,45 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestClient
 import java.math.BigInteger
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 @Service
 class EtherScanService(
     @Value("\${etherscan.api-key}") private val apiKey: String,
     @Value("\${etherscan.base-url:https://api.etherscan.io/v2/api}") baseUrl: String,
-    private val alchemyService: AlchemyService,
+    @Value("\${etherscan.rate-limit-ms:250}") private val rateLimitMs: Long, // 250ms = 4 calls/sec (safe margin)
     webClientBuilder: RestClient.Builder
 ) {
 
     private val client: RestClient = webClientBuilder.baseUrl(baseUrl).build()
     private val mapper = jacksonObjectMapper()
 
+    // Rate limiting
+    private val rateLimitLock = ReentrantLock()
+    private var lastRequestTime: Long = 0
+
+    /**
+     * Ensures we don't exceed rate limits by waiting if necessary.
+     */
+    private fun rateLimit() {
+        rateLimitLock.withLock {
+            val now = System.currentTimeMillis()
+            val elapsed = now - lastRequestTime
+            if (elapsed < rateLimitMs) {
+                val sleepTime = rateLimitMs - elapsed
+                Thread.sleep(sleepTime)
+            }
+            lastRequestTime = System.currentTimeMillis()
+        }
+    }
 
     /* ============================================================
-    * 0) GET SOURCE CODE FOR ADRESS
+    * 0) GET SOURCE CODE FOR ADDRESS
     * ============================================================ */
     fun getContractSourceCode(address: String, chainId: String = "1"): ContractSourceCodeResult {
+        rateLimit()
+
         val trimmedAddress = address.trim()
 
         val rawJson = client.get()
@@ -67,14 +89,12 @@ class EtherScanService(
         val normalizedSource = normalizeEtherscanSourceField(rawSourceField)
         val isStandardJson = looksLikeStandardJson(normalizedSource)
 
-        // Extract remappings from standard JSON input
         val remappings = if (isStandardJson) {
             extractRemappingsFromStandardJson(normalizedSource)
         } else {
             emptyList()
         }
 
-        // If it's a proxy with implementation, log it but don't auto-follow
         if (isProxy && !impl.isNullOrBlank()) {
             println("Proxy detected at $trimmedAddress → implementation: $impl")
         }
@@ -107,6 +127,7 @@ class EtherScanService(
         offset: Int = 500,
         sort: String = "asc"
     ): List<EtherscanTransaction> {
+        rateLimit()
 
         val trimmedAddress = normalizeAddress(address)
 
@@ -132,19 +153,14 @@ class EtherScanService(
         ensureOk(root, "txlist")
         val arr = EtherScanHelper.requireResultArray(root, "txlist")
 
-        // Parse JSON → Kotlin objects
         val allTx = mapper
             .readerForListOf(EtherscanTransaction::class.java)
             .readValue<List<EtherscanTransaction>>(arr)
 
-        // -------------------------------------------------------
-        // FILTER: Only one transaction per unique method selector
-        // -------------------------------------------------------
         val seen = mutableSetOf<String>()
 
         return allTx.filter { tx ->
             val selector = extractMethodSelector(tx.input) ?: return@filter false
-            // only true for first occurrence of selector
             seen.add(selector)
         }
     }
@@ -153,6 +169,8 @@ class EtherScanService(
      * 2) GET ABI OF CONTRACT (V2)
      * ============================================================ */
     fun getContractAbi(address: String, chainId: String = "1"): String {
+        rateLimit()
+
         val trimmedAddress = normalizeAddress(address)
 
         val rawJson = client.get()
@@ -177,17 +195,18 @@ class EtherScanService(
             throw EtherScanException("0", "Contract not verified on Etherscan")
         }
 
-        // Return ABI text directly
         return resultString
     }
+
     /* ============================================================
     * 3) GET CONTRACT CREATION TRANSACTION
     * ============================================================ */
-
     fun getContractCreationInfo(
         contractAddress: String,
         chainId: String = "1"
     ): ContractCreationInfo {
+        rateLimit()
+
         val trimmedAddress = normalizeAddress(contractAddress)
 
         val rawJson = client.get()
@@ -221,12 +240,12 @@ class EtherScanService(
     /* ============================================================
      * 4) GET TRANSACTION BY HASH (for replay)
      * ============================================================ */
-
-
     fun getTransactionByHash(
         txHash: String,
         chainId: String = "1"
     ): FullTransaction {
+        rateLimit()
+
         val rawJson = client.get()
             .uri { b ->
                 b.queryParam("apikey", apiKey)
