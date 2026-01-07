@@ -1,0 +1,13 @@
+[
+  {"name":"WETH9","address":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","solc":"0.4.19"},
+  {"name":"UniswapV2Factory","address":"0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f","solc":"0.5.16"},
+  {"name":"UniswapV2Router02","address":"0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D","solc":"0.6.6"},
+  {"name":"UniswapV3Factory","address":"0x1F98431c8aD98523631AE4a59f267346ea31F984","solc":"0.7.6"},
+  {"name":"NonfungiblePositionManager","address":"0xC36442b4a4522E871399CD717aBDD847Ab11FE88","solc":"0.7.6"},
+  {"name":"UniversalRouter","address":"0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af","solc":"0.8.26"},
+  {"name":"Dai","address":"0x6B175474E89094C44Da98b954EedeAC495271d0F","solc":"0.5.12"},
+  {"name":"Vat","address":"0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B","solc":"0.5.12"},
+  {"name":"ENSRegistryWithFallback","address":"0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e","solc":"0.5.16"},
+  {"name":"TetherToken","address":"0xdAC17F958D2ee523a2206206994597C13D831ec7","solc":"0.4.18"},
+  {"name":"CORE","address":"0x62359Ed7505Efc61FF1D56fEF82158CcaffA23D7","solc":"0.6.12"}
+]
