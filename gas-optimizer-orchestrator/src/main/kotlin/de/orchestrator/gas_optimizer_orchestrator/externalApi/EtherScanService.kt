@@ -26,7 +26,7 @@ import kotlin.concurrent.withLock
 class EtherScanService(
     @Value("\${etherscan.api-key}") private val apiKey: String,
     @Value("\${etherscan.base-url:https://api.etherscan.io/v2/api}") baseUrl: String,
-    @Value("\${etherscan.rate-limit-ms:250}") private val rateLimitMs: Long, // 250ms = 4 calls/sec (safe margin)
+    @Value("\${etherscan.rate-limit-ms:500}") private val rateLimitMs: Long,
     webClientBuilder: RestClient.Builder
 ) {
 

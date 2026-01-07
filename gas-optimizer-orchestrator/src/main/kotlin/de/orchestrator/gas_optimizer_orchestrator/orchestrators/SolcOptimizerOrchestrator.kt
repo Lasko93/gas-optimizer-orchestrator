@@ -1,9 +1,12 @@
 package de.orchestrator.gas_optimizer_orchestrator.orchestrators
 
-
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
-import de.orchestrator.gas_optimizer_orchestrator.model.*
+import de.orchestrator.gas_optimizer_orchestrator.model.CompilerInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.GasProfile
+import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
+import de.orchestrator.gas_optimizer_orchestrator.model.ResolvedContractInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.RunContext
 import de.orchestrator.gas_optimizer_orchestrator.model.compilation.CompiledIrRun
 import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
@@ -28,19 +31,17 @@ class SolcOptimizerOrchestrator(
      * One-call orchestrator:
      *  - compile via-ir runs (creation+runtime)
      *  - measure deployment gas (no-fork deploy)
-     *  - replay interactions on fork against srcMeta.address with runtime bytecode replaced before replay
+     *  - replay interactions on fork against interaction address with runtime bytecode replaced before replay
      *
      * @return Map<optimizeRuns, GasTrackingResults>
      */
     fun runSolcOptimizerRuns(
-        transactions: List<EtherscanTransaction>,
-        srcMeta: ContractSourceCodeResult,
-        abiJson: String,
-        creationTransaction: FullTransaction,
+        resolved: ResolvedContractInfo,
         runsList: List<Int> = listOf(1, 200, 10_000),
         outDirName: String = "out",
         viaIrRuns: Boolean = false
     ): Map<Int, GasTrackingResults> {
+        val srcMeta = resolved.sourceToCompile
 
         // 1) Compile all IR variants
         val compiledRuns: List<CompiledIrRun> = compilationPipeline.compileViaSolcOptimizer(
@@ -51,11 +52,11 @@ class SolcOptimizerOrchestrator(
             viaVrRuns = viaIrRuns
         )
 
-        // 2) Build interactions once (they'll be retargeted during each replay)
+        // 2) Build interactions once targeting the interaction address
         val interactions = interactionCreationService.buildInteractions(
-            abiJson = abiJson,
-            contractAddress = srcMeta.address, // Initial address (will be updated during replay)
-            transactions = transactions
+            abiJson = resolved.abiJson,
+            contractAddress = resolved.interactionAddress,
+            transactions = resolved.transactions
         )
 
         // 3) Execute each IR run
@@ -64,9 +65,9 @@ class SolcOptimizerOrchestrator(
             // Measure deployment gas on a separate fork
             val deployBytecode = BytecodeUtil.appendConstructorArgs(
                 bytecode = run.creationBytecode,
-                constructorArgsHex = srcMeta.constructorArgumentsHex
+                constructorArgsHex = resolved.constructorArgsHex
             )
-            val deployReceipt = anvilService.deployOnFork(deployBytecode, creationTransaction)
+            val deployReceipt = anvilService.deployOnFork(deployBytecode, resolved.creationTransaction)
             val deploymentGasUsed = deployReceipt.gasUsed?.toLong() ?: 0L
 
             // Replay each interaction with optimized contract deployed fresh in each fork
@@ -76,17 +77,16 @@ class SolcOptimizerOrchestrator(
                 val outcome = forkReplayService.replayWithCustomContract(
                     interaction = interaction,
                     creationBytecode = run.creationBytecode,
-                    constructorArgsHex = srcMeta.constructorArgumentsHex,
-                    originalContractAddress = srcMeta.address,
-                    creationTx = creationTransaction
+                    constructorArgsHex = resolved.constructorArgsHex,
+                    resolved = resolved
                 )
 
                 mapOutcomeToFunctionGasUsed(interaction.functionName, sig, outcome)
             }
 
             run.optimizeRuns to GasTrackingResults(
-                contractName = srcMeta.contractName,
-                contractAddress = srcMeta.address,
+                contractName = resolved.contractName,
+                contractAddress = resolved.interactionAddress,
                 compilerInfo = CompilerInfo(solcVersion = run.solcVersion ?: srcMeta.compilerVersion),
                 creationBytecode = run.creationBytecode,
                 runtimeBytecode = run.runtimeBytecode,

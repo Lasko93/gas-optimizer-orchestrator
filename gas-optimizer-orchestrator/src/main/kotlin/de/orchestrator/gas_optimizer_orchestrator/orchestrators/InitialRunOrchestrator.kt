@@ -2,11 +2,9 @@ package de.orchestrator.gas_optimizer_orchestrator.orchestrators
 
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
 import de.orchestrator.gas_optimizer_orchestrator.model.CompilerInfo
-import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
-import de.orchestrator.gas_optimizer_orchestrator.model.EtherscanTransaction
-import de.orchestrator.gas_optimizer_orchestrator.model.FullTransaction
 import de.orchestrator.gas_optimizer_orchestrator.model.GasProfile
 import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
+import de.orchestrator.gas_optimizer_orchestrator.model.ResolvedContractInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.RunContext
 import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
@@ -26,12 +24,9 @@ class InitialRunOrchestrator(
     private val paths: GasOptimizerPathsProperties
 ) {
 
-    fun runInitial(
-        transactions: List<EtherscanTransaction>,
-        srcMeta: ContractSourceCodeResult,
-        abiJson: String,
-        creationTransaction: FullTransaction
-    ): GasTrackingResults {
+    fun runInitial(resolved: ResolvedContractInfo): GasTrackingResults {
+
+        val srcMeta = resolved.sourceToCompile
 
         // 1) Compile + get deploy bytecode
         val compiled = compilationPipeline.compileBaselineNoOptimize(
@@ -46,14 +41,14 @@ class InitialRunOrchestrator(
         )
 
         // Measure deployment gas on a separate fork
-        val deployReceipt = anvilService.deployOnFork(deployBytecode, creationTransaction)
+        val deployReceipt = anvilService.deployOnFork(deployBytecode, resolved.creationTransaction)
         val deploymentGasUsed = deployReceipt.gasUsed?.toLong() ?: 0L
 
         // 2) Build interactions (they'll be retargeted during each replay)
         val interactions = interactionCreationService.buildInteractions(
-            abiJson = abiJson,
-            contractAddress = srcMeta.address, // Initial address (will be updated during replay)
-            transactions = transactions
+            abiJson = resolved.abiJson,
+            contractAddress = resolved.interactionAddress,
+            transactions = resolved.transactions
         )
 
         // 3) Replay each interaction with baseline contract deployed fresh in each fork
@@ -63,17 +58,16 @@ class InitialRunOrchestrator(
             val outcome = forkReplayService.replayWithCustomContract(
                 interaction = interaction,
                 creationBytecode = compiled.creationBytecode,
-                constructorArgsHex = srcMeta.constructorArgumentsHex,
-                originalContractAddress = srcMeta.address,
-                creationTx = creationTransaction
+                constructorArgsHex = resolved.constructorArgsHex,
+                resolved = resolved
             )
 
             mapOutcomeToFunctionGasUsed(interaction.functionName, signature, outcome)
         }
 
         return GasTrackingResults(
-            contractName = srcMeta.contractName,
-            contractAddress = srcMeta.address,
+            contractName = resolved.contractName,
+            contractAddress = resolved.interactionAddress,
             creationBytecode = compiled.creationBytecode,
             runtimeBytecode = compiled.runtimeBytecode,
             compilerInfo = CompilerInfo(solcVersion = srcMeta.compilerVersion),
