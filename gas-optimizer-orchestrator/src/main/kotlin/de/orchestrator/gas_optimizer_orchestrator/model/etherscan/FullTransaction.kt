@@ -1,4 +1,4 @@
-package de.orchestrator.gas_optimizer_orchestrator.model
+package de.orchestrator.gas_optimizer_orchestrator.model.etherscan
 
 import java.math.BigInteger
 

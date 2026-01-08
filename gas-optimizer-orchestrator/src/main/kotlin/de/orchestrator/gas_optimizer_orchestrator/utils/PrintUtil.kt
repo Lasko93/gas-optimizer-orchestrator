@@ -1,6 +1,6 @@
 package de.orchestrator.gas_optimizer_orchestrator.utils
 
-import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
 import de.orchestrator.gas_optimizer_orchestrator.model.slither.SlitherReport
 import de.orchestrator.gas_optimizer_orchestrator.utils.GasMetricsUtil.formatPercent

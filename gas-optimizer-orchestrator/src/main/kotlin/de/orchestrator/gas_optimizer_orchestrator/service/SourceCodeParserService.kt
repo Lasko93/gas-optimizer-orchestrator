@@ -2,7 +2,7 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path

@@ -1,7 +1,7 @@
 package de.orchestrator.gas_optimizer_orchestrator.orchestrators
 
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
-import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.service.SlitherService
 import de.orchestrator.gas_optimizer_orchestrator.service.SourceCodeParserService
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeCompilerManager

@@ -21,12 +21,7 @@ class DemoDeployConfig(
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        // 0x3d9819210A31b4961b30EF54bE2aeD79B9c9Cd3B fix the gasfee issue to legacy contracts
-        // 0x7a56e1c57c7475ccf742a1832b028f0456652f97 fix beacon proxy
-        //
-        //ToDo: Implement fetching proxy / implementation --> Fetch both, compile implementation, fetch transaction from proxy, handle deploy etc
-        //ToDO: Remove gasestimate on slither
-        val target = "0xb8ca40e2c5d77f0bc1aa88b2689dddb279f7a5eb"
+        val target = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
         // Single resolution step handles proxy vs direct
         val resolved = contractResolverService.resolveContract(target)
 

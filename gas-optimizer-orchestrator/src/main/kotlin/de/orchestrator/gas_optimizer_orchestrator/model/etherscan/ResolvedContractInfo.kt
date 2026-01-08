@@ -1,4 +1,6 @@
-package de.orchestrator.gas_optimizer_orchestrator.model
+package de.orchestrator.gas_optimizer_orchestrator.model.etherscan
+
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 
 data class ResolvedContractInfo(
     val proxyAddress: String?,                    // null if not a proxy

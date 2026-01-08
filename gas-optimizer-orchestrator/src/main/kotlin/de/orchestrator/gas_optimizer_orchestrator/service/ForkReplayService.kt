@@ -2,7 +2,7 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
-import de.orchestrator.gas_optimizer_orchestrator.model.ResolvedContractInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ResolvedContractInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.ReplayOutcome
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import org.springframework.stereotype.Service

@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeCompilerManager
 import de.orchestrator.gas_optimizer_orchestrator.model.compilation.CompiledContract
 import de.orchestrator.gas_optimizer_orchestrator.model.compilation.CompiledIrRun
-import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.utils.CombinedJsonHelper
 import org.springframework.stereotype.Service
 import java.io.File

@@ -2,7 +2,7 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
-import de.orchestrator.gas_optimizer_orchestrator.model.FullTransaction
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.FullTransaction
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil.validateBytecode
 import org.springframework.stereotype.Service
@@ -27,36 +27,6 @@ class AnvilInteractionService(
 
     fun gasPrice(): BigInteger = gasProvider.gasPrice
     fun gasLimit(): BigInteger = BigInteger("10000000")
-
-    /**
-     * Deploys a raw bytecode string (0x prefixed) on a fresh non-forked Anvil.
-     *
-     * Used for:
-     *  - Etherscan V2 bytecode
-     *  - RPC bytecode (eth_getCode)
-     */
-    fun deployRawBytecode(bytecode: String,constructorArgsHex:String): TransactionReceipt {
-        anvilManager.startAnvilNoFork()
-        validateBytecode(bytecode)
-
-        val deployBytecode = BytecodeUtil.appendConstructorArgs(
-            bytecode = bytecode,
-            constructorArgsHex = constructorArgsHex
-        )
-
-        val receipt = deployContract(bytecode = deployBytecode, value = BigInteger.ZERO)
-
-        if (receipt.status != "0x1") {
-            throw IllegalStateException("Deployment failed: status=${receipt.status}, gasUsed=${receipt.gasUsed}")
-        }
-
-        val contractAddress = receipt.contractAddress
-            ?: throw IllegalStateException("Anvil did not return a contract address")
-
-        println("Contract deployed at $contractAddress")
-        println("Gas used: ${receipt.gasUsed}")
-        return receipt
-    }
 
     /**
      * Deploys freshly compiled bytecode on an Anvil fork,
@@ -91,26 +61,6 @@ class AnvilInteractionService(
         println("  Gas used: ${receipt.gasUsed}")
 
         return receipt
-    }
-
-    /**
-     * RAW CONTRACT DEPLOYMENT
-     * to = "" and data = bytecode
-     *
-     * Note: does NOT start/stop Anvil. Caller decides environment (fork/no-fork).
-     */
-    fun deployContract(bytecode: String, value: BigInteger = BigInteger.ZERO): TransactionReceipt {
-        validateBytecode(bytecode)
-
-        val tx = txManager.sendTransaction(
-            gasPrice(),
-            gasLimit(),
-            "",     // empty → contract deployment
-            bytecode,
-            value
-        )
-
-        return waitForReceipt(tx.transactionHash)
     }
 
     /**

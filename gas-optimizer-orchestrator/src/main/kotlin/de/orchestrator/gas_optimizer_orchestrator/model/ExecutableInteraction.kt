@@ -1,5 +1,6 @@
 package de.orchestrator.gas_optimizer_orchestrator.model
 
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.EtherscanTransaction
 import de.orchestrator.gas_optimizer_orchestrator.utils.AbiTypeConverter
 import org.web3j.abi.datatypes.Function
 import org.web3j.abi.FunctionEncoder

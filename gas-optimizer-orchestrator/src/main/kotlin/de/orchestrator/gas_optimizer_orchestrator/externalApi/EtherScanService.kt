@@ -2,10 +2,10 @@ package de.orchestrator.gas_optimizer_orchestrator.externalApi
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import de.orchestrator.gas_optimizer_orchestrator.exceptions.EtherScanException
-import de.orchestrator.gas_optimizer_orchestrator.model.ContractCreationInfo
-import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
-import de.orchestrator.gas_optimizer_orchestrator.model.EtherscanTransaction
-import de.orchestrator.gas_optimizer_orchestrator.model.FullTransaction
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractCreationInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.EtherscanTransaction
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.FullTransaction
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.ensureOk
 import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.extractMethodSelector

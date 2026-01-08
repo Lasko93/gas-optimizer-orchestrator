@@ -5,7 +5,7 @@ import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManag
 import de.orchestrator.gas_optimizer_orchestrator.model.CompilerInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.GasProfile
 import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
-import de.orchestrator.gas_optimizer_orchestrator.model.ResolvedContractInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ResolvedContractInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.RunContext
 import de.orchestrator.gas_optimizer_orchestrator.model.compilation.CompiledIrRun
 import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService

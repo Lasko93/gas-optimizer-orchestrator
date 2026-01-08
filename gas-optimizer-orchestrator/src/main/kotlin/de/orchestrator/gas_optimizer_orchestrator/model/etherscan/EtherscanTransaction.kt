@@ -1,4 +1,4 @@
-package de.orchestrator.gas_optimizer_orchestrator.model
+package de.orchestrator.gas_optimizer_orchestrator.model.etherscan
 
 data class EtherscanTransaction(
     val blockNumber: String,
@@ -11,7 +11,7 @@ data class EtherscanTransaction(
     val to: String?,
     val value: String,
     val gas: String,
-    val gasPrice: String,
+    var gasPrice: String,
     val isError: String,
     val txreceipt_status: String?,
     val input: String,

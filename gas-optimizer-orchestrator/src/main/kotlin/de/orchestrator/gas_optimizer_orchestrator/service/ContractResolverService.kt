@@ -1,8 +1,8 @@
 package de.orchestrator.gas_optimizer_orchestrator.service
 
 import de.orchestrator.gas_optimizer_orchestrator.externalApi.EtherScanService
-import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
-import de.orchestrator.gas_optimizer_orchestrator.model.ResolvedContractInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ResolvedContractInfo
 import org.springframework.stereotype.Service
 
 @Service

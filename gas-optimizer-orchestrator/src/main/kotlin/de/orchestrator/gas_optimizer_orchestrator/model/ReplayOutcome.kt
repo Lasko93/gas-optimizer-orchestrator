@@ -20,12 +20,4 @@ sealed class ReplayOutcome {
         val errorMessage: String,
         val callRevertReason: String? = null
     ) : ReplayOutcome()
-
-    fun isSuccess(): Boolean = this is Success
-
-    fun gasUsedOrNull(): BigInteger? = when (this) {
-        is Success -> gasUsed
-        is Reverted -> gasUsed
-        is Failed -> null
-    }
 }

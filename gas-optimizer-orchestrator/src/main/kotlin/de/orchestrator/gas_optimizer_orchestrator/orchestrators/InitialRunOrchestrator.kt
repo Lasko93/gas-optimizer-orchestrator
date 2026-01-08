@@ -4,7 +4,7 @@ import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProper
 import de.orchestrator.gas_optimizer_orchestrator.model.CompilerInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.GasProfile
 import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
-import de.orchestrator.gas_optimizer_orchestrator.model.ResolvedContractInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ResolvedContractInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.RunContext
 import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline

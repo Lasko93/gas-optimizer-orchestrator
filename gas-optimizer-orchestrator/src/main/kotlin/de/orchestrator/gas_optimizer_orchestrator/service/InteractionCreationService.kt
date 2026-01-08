@@ -2,7 +2,7 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import de.orchestrator.gas_optimizer_orchestrator.model.EtherscanTransaction
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.EtherscanTransaction
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import de.orchestrator.gas_optimizer_orchestrator.utils.AbiInputDecoder
 import org.springframework.stereotype.Service

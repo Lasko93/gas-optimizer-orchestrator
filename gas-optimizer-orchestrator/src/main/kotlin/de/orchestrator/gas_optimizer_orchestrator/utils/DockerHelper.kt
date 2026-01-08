@@ -37,7 +37,7 @@ class DockerHelper(
         tty: Boolean = false
     ) {
         val args = mutableListOf("exec")
-        if (!tty) args += "-T" // CI / non-interactive
+        if (!tty) args += "-T"
         args += listOf(service, "bash", "-lc", bashScript)
 
         dockerCompose(args, env)
