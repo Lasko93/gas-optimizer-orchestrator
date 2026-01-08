@@ -2,7 +2,6 @@ package de.orchestrator.gas_optimizer_orchestrator.utils
 
 import de.orchestrator.gas_optimizer_orchestrator.model.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
-import de.orchestrator.gas_optimizer_orchestrator.model.slither.SlitherFinding
 import de.orchestrator.gas_optimizer_orchestrator.model.slither.SlitherReport
 import de.orchestrator.gas_optimizer_orchestrator.utils.GasMetricsUtil.formatPercent
 import de.orchestrator.gas_optimizer_orchestrator.utils.GasMetricsUtil.percentageChange
@@ -26,60 +25,40 @@ object PrintUtil {
 
         println()
         println("╔${"═".repeat(LINE_WIDTH)}╗")
-        println("║${centerText("SLITHER GAS ANALYSIS", LINE_WIDTH)}║")
+        println("║${centerText("SLITHER ANALYSIS", LINE_WIDTH)}║")
         println("╚${"═".repeat(LINE_WIDTH)}╝")
         println()
         println("Summary:")
-        println("  Total findings: ${report.totalFindings}")
-        println("  Optimization:   ${report.optimizationFindings}")
-        println("  High impact:    ${report.highImpactFindings}")
-        println("  Medium impact:  ${report.mediumImpactFindings}")
-        println("  Low impact:     ${report.lowImpactFindings}")
-        println("  Informational:  ${report.informationalFindings}")
+        println("  Total findings:   ${report.totalFindings}")
+        println("  High impact:      ${report.highImpactFindings}")
+        println("  Medium impact:    ${report.mediumImpactFindings}")
+        println("  Low impact:       ${report.lowImpactFindings}")
+        println("  Informational:    ${report.informationalFindings}")
+        println("  Optimization:     ${report.optimizationFindings}")
         println()
 
-        val savings = report.estimateTotalSavings(expectedCallsPerFunction = 100)
-        println("Estimated Gas Savings (if all optimizations applied):")
-        println("  Deployment:        ~${savings.estimatedDeploymentSavings} gas")
-        println("  Per call:          ~${savings.estimatedPerCallSavings} gas")
-        println()
-
-        if (report.gasOptimizationFindings.isNotEmpty()) {
-            println("Gas Optimization Suggestions:")
+        if (report.findings.isNotEmpty()) {
+            println("Findings by Category:")
             println("─".repeat(LINE_WIDTH))
 
-            report.gasOptimizationFindings
-                .groupBy { it.check }
-                .forEach { (check, findings) ->
-                    val estimate = SlitherFinding.getEstimatedSavings(check)
-                    val savingsStr = estimate?.let {
-                        " [~${it.perCall} gas/call, ~${it.perDeployment} gas deploy]"
+            report.findingsByImpact.forEach { (impact, findings) ->
+                println()
+                println("[$impact] (${findings.size} finding(s))")
+
+                findings.forEach { finding ->
+                    val location = finding.elements.firstOrNull()?.let { el ->
+                        val lines = el.sourceMapping?.lines?.take(3)?.joinToString(",") ?: "?"
+                        "${el.sourceMapping?.filename ?: ""}:$lines"
                     } ?: ""
 
-                    println()
-                    println("[$check] (${findings.size} finding(s))$savingsStr")
-                    if (estimate != null) {
-                        println("  💡 ${estimate.description}")
-                    }
-
-                    findings.take(5).forEach { finding ->
-                        val location = finding.elements.firstOrNull()?.let { el ->
-                            val lines = el.sourceMapping?.lines?.take(3)?.joinToString(",") ?: "?"
-                            "${el.sourceMapping?.filename ?: ""}:$lines"
-                        } ?: ""
-
-                        println("  • ${finding.shortDescription}")
-                        if (location.isNotEmpty()) {
-                            println("    Location: $location")
-                        }
-                    }
-
-                    if (findings.size > 5) {
-                        println("  ... and ${findings.size - 5} more")
+                    println("  • [${finding.check}] ${finding.shortDescription}")
+                    if (location.isNotEmpty()) {
+                        println("    Location: $location")
                     }
                 }
+            }
         } else {
-            println("No gas optimization suggestions found.")
+            println("No findings.")
         }
 
         println()

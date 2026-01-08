@@ -48,22 +48,6 @@ class SlitherService(
         )
     }
 
-    /**
-     * Führt vollständige Slither-Analyse aus (alle Detektoren)
-     */
-    fun analyzeFullSecurity(
-        solFileName: String,
-        solcVersion: String,
-        remappings: List<String> = emptyList()
-    ): SlitherReport {
-        return runSlither(
-            solFileName = solFileName,
-            solcVersion = solcVersion,
-            remappings = remappings,
-            detectors = ALL_DETECTORS
-        )
-    }
-
     private fun runSlither(
         solFileName: String,
         solcVersion: String,

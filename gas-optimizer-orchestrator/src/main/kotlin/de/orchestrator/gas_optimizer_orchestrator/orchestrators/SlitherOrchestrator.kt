@@ -30,18 +30,4 @@ class SlitherOrchestrator(
             remappings = srcMeta.remappings
         )
     }
-
-    /**
-     * Vollständige Security-Analyse
-     */
-    fun analyzeFullSecurity(srcMeta: ContractSourceCodeResult): SlitherReport {
-        compilerManager.cleanExternalContractsDir()
-        sourceCodeParserService.createSourceCodeArtifact(srcMeta, paths.externalContractsDir)
-
-        return slitherService.analyzeFullSecurity(
-            solFileName = "${srcMeta.contractName}.sol",
-            solcVersion = srcMeta.compilerVersion,
-            remappings = srcMeta.remappings
-        )
-    }
 }
