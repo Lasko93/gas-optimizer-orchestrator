@@ -21,7 +21,7 @@ class DemoDeployConfig(
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
 
-        val target = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+        val target = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
         // Single resolution step handles proxy vs direct
         val resolved = contractResolverService.resolveContract(target)
 

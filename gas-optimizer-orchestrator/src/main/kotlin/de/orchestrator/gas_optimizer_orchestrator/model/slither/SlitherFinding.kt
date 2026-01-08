@@ -1,5 +1,8 @@
 package de.orchestrator.gas_optimizer_orchestrator.model.slither
 
+/**
+ * A single finding/issue detected by Slither.
+ */
 data class SlitherFinding(
     val check: String,
     val impact: String,
