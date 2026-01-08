@@ -18,7 +18,9 @@ class ForkReplayService(
     private val web3j: Web3j,
     private val proxyUpdateService: ProxyUpdateService
 ) {
-
+    companion object {
+        private val ONE_GWEI = BigInteger("1000000000")
+    }
     /**
      * Replay interaction with custom bytecode:
      * - Fork at (interaction.blockNumber - 1)
@@ -195,8 +197,8 @@ class ForkReplayService(
             bytecode = creationBytecode,
             constructorArgsHex = constructorArgsHex
         )
-
         val creationTx = resolved.creationTransaction
+        val adjustedGasPrice = getAdjustedGasPrice(creationTx.gasPrice)
 
         anvilManager.impersonateAccount(creationTx.from)
         anvilManager.setBalance(creationTx.from, BigInteger.TEN.pow(20))
@@ -206,7 +208,7 @@ class ForkReplayService(
             to = null,
             value = BigInteger.ZERO, // Implementations typically deployed with 0 value
             gasLimit = anvilInteractionService.gasLimit(),
-            gasPrice = creationTx.gasPrice,
+            gasPrice = adjustedGasPrice,
             data = deployBytecode
         )
 
@@ -220,7 +222,7 @@ class ForkReplayService(
      */
     private fun executeAndMeasure(interaction: ExecutableInteraction): ReplayOutcome {
         // Adjust gas price for EIP-1559 (post-London fork)
-        val adjustedInteraction = adjustGasPriceForBaseFee(interaction)
+        val adjustedInteraction = adjustInteractionGasPrice(interaction)
 
         val revertReason = simulateCall(adjustedInteraction)
 
@@ -238,31 +240,33 @@ class ForkReplayService(
         }
     }
 
+    private fun getAdjustedGasPrice(originalGasPrice: BigInteger): BigInteger {
+        val baseFee = getBlockBaseFee()
+        if (baseFee == BigInteger.ZERO) {
+            return originalGasPrice
+        }
+
+        val minGasPrice = baseFee.add(ONE_GWEI)
+        return maxOf(originalGasPrice, minGasPrice)
+    }
+
     /**
      * Adjusts gas price to be at least the current block's base fee.
      * Required for post-EIP-1559 (London fork) blocks.
      */
-    private fun adjustGasPriceForBaseFee(interaction: ExecutableInteraction): ExecutableInteraction {
-        val baseFee = getBlockBaseFee()
+    private fun adjustInteractionGasPrice(interaction: ExecutableInteraction): ExecutableInteraction {
+        val originalGasPrice = interaction.tx.gasPrice.toBigIntegerOrNull() ?: BigInteger.ZERO
+        val adjustedGasPrice = getAdjustedGasPrice(originalGasPrice)
 
-        // If no base fee, we're on a pre-London fork - no adjustment needed
-        if (baseFee == BigInteger.ZERO) {
+        if (adjustedGasPrice == originalGasPrice) {
             return interaction
         }
 
-        val originalGasPrice = interaction.tx.gasPrice.toBigIntegerOrNull() ?: BigInteger.ZERO
-
-        // Gas price must be at least baseFee + 1 gwei priority fee
-        val minGasPrice = baseFee.add(BigInteger("1000000000")) // baseFee + 1 gwei
-
-        return if (originalGasPrice < minGasPrice) {
-            interaction.copy(
-                tx = interaction.tx.copy(gasPrice = minGasPrice.toString())
-            )
-        } else {
-            interaction
-        }
+        return interaction.copy(
+            tx = interaction.tx.copy(gasPrice = adjustedGasPrice.toString())
+        )
     }
+
 
     /**
      * Gets the current block's base fee, or ZERO if not available (pre-London).
