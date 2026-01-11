@@ -7,14 +7,7 @@ import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractCreati
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.EtherscanTransaction
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.FullTransaction
-import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.ensureOk
-import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.extractMethodSelector
-import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.looksLikeStandardJson
-import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.normalizeEtherscanSourceField
-import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.optionalText
-import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.requireNonEmptyResultArray
-import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.requireResultArray
-import de.orchestrator.gas_optimizer_orchestrator.utils.JsonHelper.extractRemappingsFromStandardJson
+import de.orchestrator.gas_optimizer_orchestrator.utils.etherscan.EtherscanResponseHelper
 import org.springframework.stereotype.Component
 import java.math.BigInteger
 
@@ -38,35 +31,35 @@ class EtherscanResponseParser {
      * Parses contract source code response.
      */
     fun parseContractSourceCode(root: JsonNode, address: String): ContractSourceCodeResult {
-        ensureOk(root, "getsourcecode")
-        val entry = requireNonEmptyResultArray(root, "getsourcecode")[0]
+        EtherscanResponseHelper.ensureSuccess(root, "getsourcecode")
+        val entry = EtherscanResponseHelper.requireNonEmptyResultArray(root, "getsourcecode")[0]
 
         val isProxy = entry["Proxy"]?.asText() == EtherscanConstants.PROXY_INDICATOR
         val impl = entry["Implementation"]?.asText()
 
-        val rawSourceField = optionalText(entry, "SourceCode")
+        val rawSourceField = EtherscanResponseHelper.optionalText(entry, "SourceCode")
         if (rawSourceField.isBlank()) {
             throw EtherScanException("0", "Contract has no verified source code on Etherscan")
         }
 
-        val normalizedSource = normalizeEtherscanSourceField(rawSourceField)
-        val isStandardJson = looksLikeStandardJson(normalizedSource)
+        val normalizedSource = EtherscanResponseHelper.normalizeSourceField(rawSourceField)
+        val isStandardJson = EtherscanResponseHelper.isStandardJsonInput(normalizedSource)
         val remappings = if (isStandardJson) {
-            extractRemappingsFromStandardJson(normalizedSource)
+            EtherscanResponseHelper.extractRemappings(normalizedSource)
         } else {
             emptyList()
         }
 
         return ContractSourceCodeResult(
             address = address,
-            contractName = optionalText(entry, "ContractName"),
-            compilerVersion = optionalText(entry, "CompilerVersion"),
+            contractName = EtherscanResponseHelper.optionalText(entry, "ContractName"),
+            compilerVersion = EtherscanResponseHelper.optionalText(entry, "CompilerVersion"),
             optimizationUsed = entry["OptimizationUsed"]?.asText() == EtherscanConstants.OPTIMIZATION_ENABLED,
             runs = entry["Runs"]?.asInt() ?: 0,
             evmVersion = entry["EVMVersion"]?.asText(),
             sourceCode = normalizedSource,
             isStandardJsonInput = isStandardJson,
-            constructorArgumentsHex = optionalText(entry, "ConstructorArguments"),
+            constructorArgumentsHex = EtherscanResponseHelper.optionalText(entry, "ConstructorArguments"),
             remappings = remappings,
             isProxy = isProxy,
             implementationAddress = impl
@@ -77,8 +70,8 @@ class EtherscanResponseParser {
      * Parses transaction list response, filtering for unique method selectors.
      */
     fun parseTransactions(root: JsonNode): List<EtherscanTransaction> {
-        ensureOk(root, "txlist")
-        val arr = requireResultArray(root, "txlist")
+        EtherscanResponseHelper.ensureSuccess(root, "txlist")
+        val arr = EtherscanResponseHelper.requireResultArray(root, "txlist")
 
         val allTx: List<EtherscanTransaction> = mapper
             .readerForListOf(EtherscanTransaction::class.java)
@@ -86,7 +79,7 @@ class EtherscanResponseParser {
 
         val seen = mutableSetOf<String>()
         return allTx.filter { tx ->
-            val selector = extractMethodSelector(tx.input) ?: return@filter false
+            val selector = EtherscanResponseHelper.extractMethodSelector(tx.input) ?: return@filter false
             seen.add(selector)
         }
     }
@@ -95,7 +88,7 @@ class EtherscanResponseParser {
      * Parses ABI response.
      */
     fun parseAbi(root: JsonNode): String {
-        ensureOk(root, "getabi")
+        EtherscanResponseHelper.ensureSuccess(root, "getabi")
         val resultString = root["result"]?.asText().orEmpty()
 
         if (resultString == EtherscanConstants.CONTRACT_NOT_VERIFIED_MESSAGE) {
@@ -109,8 +102,8 @@ class EtherscanResponseParser {
      * Parses contract creation info response.
      */
     fun parseContractCreationInfo(root: JsonNode): ContractCreationInfo {
-        ensureOk(root, "getcontractcreation")
-        val arr = requireNonEmptyResultArray(root, "getcontractcreation")
+        EtherscanResponseHelper.ensureSuccess(root, "getcontractcreation")
+        val arr = EtherscanResponseHelper.requireNonEmptyResultArray(root, "getcontractcreation")
         val entry = arr[0]
 
         return ContractCreationInfo(

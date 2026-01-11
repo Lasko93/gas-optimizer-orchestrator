@@ -5,7 +5,7 @@ import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import de.orchestrator.gas_optimizer_orchestrator.model.ReplayOutcome
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ResolvedContractInfo
 import de.orchestrator.gas_optimizer_orchestrator.service.ProxyUpdateService
-import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
+import de.orchestrator.gas_optimizer_orchestrator.utils.bytecode.BytecodeUtil
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.web3j.protocol.Web3j

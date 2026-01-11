@@ -1,7 +1,10 @@
 package de.orchestrator.gas_optimizer_orchestrator.service.slither
 
-import de.orchestrator.gas_optimizer_orchestrator.utils.CompilerHelper
+import de.orchestrator.gas_optimizer_orchestrator.utils.compiler.SolcVersionUtil
 
+/**
+ * Builds bash scripts for running Slither static analysis.
+ */
 internal class SlitherScriptBuilder(
     private val solFileName: String,
     private val solcVersion: String,
@@ -15,7 +18,7 @@ internal class SlitherScriptBuilder(
     }
 
     fun build(): String {
-        val normalizedVersion = CompilerHelper.normalizeSolcVersion(solcVersion)
+        val normalizedVersion = SolcVersionUtil.normalize(solcVersion)
         return listOf(
             "cd $WORKING_DIR",
             buildSolcSelectCommand(normalizedVersion),

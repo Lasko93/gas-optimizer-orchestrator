@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.EtherscanTransaction
-import de.orchestrator.gas_optimizer_orchestrator.utils.AbiInputDecoder
+import de.orchestrator.gas_optimizer_orchestrator.utils.abi.AbiDecoder
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.math.BigInteger
@@ -76,7 +76,7 @@ class InteractionCreationService(
         return abi
             .filter { it["type"]?.asText() == "function" }
             .associateBy { fn ->
-                AbiInputDecoder.selectorFromAbi(fn)
+                AbiDecoder.computeSelector(fn)
             }
     }
 
@@ -137,7 +137,7 @@ class InteractionCreationService(
         val types = inputNodes.map { it["type"].asText() }
 
         val calldata = extractCalldata(tx.input)
-        val decodedInputs = AbiInputDecoder.decodeInputs(types, calldata, inputNodes)
+        val decodedInputs = AbiDecoder.decodeInputs(types, calldata, inputNodes)
 
         logger.trace(
             "Created interaction: {}({}) from tx {}",

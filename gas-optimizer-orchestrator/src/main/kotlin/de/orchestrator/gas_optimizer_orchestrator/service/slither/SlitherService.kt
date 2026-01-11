@@ -1,14 +1,14 @@
 package de.orchestrator.gas_optimizer_orchestrator.service.slither
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import de.orchestrator.gas_optimizer_orchestrator.docker.DockerHelper
 import de.orchestrator.gas_optimizer_orchestrator.model.slither.SlitherReport
+import de.orchestrator.gas_optimizer_orchestrator.utils.docker.DockerCommandExecutor
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 @Service
 class SlitherService(
-    private val docker: DockerHelper,
+    private val dockerCommandExecutor: DockerCommandExecutor,
     private val objectMapper: ObjectMapper,
     @Value("\${docker.compiler.service-name:compiler}") private val serviceName: String
 ) {
@@ -50,7 +50,7 @@ class SlitherService(
     }
 
     private fun executeInDocker(script: String): String =
-        docker.dockerComposeExecBashWithOutput(
+        dockerCommandExecutor.composeExecBashWithOutput(
             service = serviceName,
             bashScript = script,
             tty = false,

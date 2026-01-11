@@ -5,7 +5,7 @@ import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractCreati
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.EtherscanTransaction
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.FullTransaction
-import de.orchestrator.gas_optimizer_orchestrator.utils.EtherScanHelper.normalizeAddress
+import de.orchestrator.gas_optimizer_orchestrator.utils.etherscan.EtherscanResponseHelper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -123,7 +123,7 @@ class EtherScanService(
      * Fetches transactions for an address using a query builder.
      */
     fun getTransactions(query: TransactionQuery): List<EtherscanTransaction> {
-        val normalizedAddress = normalizeAddress(query.address)
+        val normalizedAddress = EtherscanResponseHelper.normalizeAddress(query.address)
         logger.info("Fetching transactions for address: {}", normalizedAddress)
 
         return executeRequest(
@@ -145,7 +145,7 @@ class EtherScanService(
         address: String,
         chainId: String = EtherscanConstants.DEFAULT_CHAIN_ID
     ): String {
-        val trimmedAddress = normalizeAddress(address)
+        val trimmedAddress = EtherscanResponseHelper.normalizeAddress(address)
         logger.info("Fetching ABI for contract: {}", trimmedAddress)
 
         return executeRequest(
@@ -165,7 +165,7 @@ class EtherScanService(
         contractAddress: String,
         chainId: String = EtherscanConstants.DEFAULT_CHAIN_ID
     ): ContractCreationInfo {
-        val trimmedAddress = normalizeAddress(contractAddress)
+        val trimmedAddress = EtherscanResponseHelper.normalizeAddress(contractAddress)
         logger.info("Fetching creation info for contract: {}", trimmedAddress)
 
         return executeRequest(

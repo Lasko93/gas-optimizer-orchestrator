@@ -6,7 +6,7 @@ import de.orchestrator.gas_optimizer_orchestrator.orchestrators.InitialRunOrches
 import de.orchestrator.gas_optimizer_orchestrator.orchestrators.SlitherOrchestrator
 import de.orchestrator.gas_optimizer_orchestrator.orchestrators.SolcOptimizerOrchestrator
 import de.orchestrator.gas_optimizer_orchestrator.service.etherscan.ContractResolverService
-import de.orchestrator.gas_optimizer_orchestrator.utils.PrintUtil
+import de.orchestrator.gas_optimizer_orchestrator.utils.reporting.ConsoleReporter
 import org.slf4j.LoggerFactory
 import org.springframework.boot.CommandLineRunner
 import org.springframework.context.annotation.Bean
@@ -23,7 +23,7 @@ class DemoDeployConfig(
 
     @Bean
     fun demoDeployRunner() = CommandLineRunner {
-        val target = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+        val target = "0x6B175474E89094C44Da98b954EedeAC495271d0F"
 
         val resolution = contractResolverService.resolve(target)
         logResolutionDetails(resolution)
@@ -43,7 +43,7 @@ class DemoDeployConfig(
         val optimizedResults = solcOptimizerOrchestrator.run(resolution)
 
         // 4. Print Full Report
-        PrintUtil.printFullReport(
+        ConsoleReporter.printFullReport(
             slitherReport = slitherReport,
             baseline = baseline,
             optimizedResults = optimizedResults,

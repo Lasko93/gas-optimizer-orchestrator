@@ -18,9 +18,9 @@ import de.orchestrator.gas_optimizer_orchestrator.service.anvil.AnvilInteraction
 import de.orchestrator.gas_optimizer_orchestrator.service.compilation.CompilationPipeline
 import de.orchestrator.gas_optimizer_orchestrator.service.anvil.ForkReplayService
 import de.orchestrator.gas_optimizer_orchestrator.service.InteractionCreationService
-import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
-import de.orchestrator.gas_optimizer_orchestrator.utils.GasTrackingUtil
-import de.orchestrator.gas_optimizer_orchestrator.utils.SignatureUtil
+import de.orchestrator.gas_optimizer_orchestrator.utils.bytecode.BytecodeUtil
+import de.orchestrator.gas_optimizer_orchestrator.utils.abi.AbiDecoder
+import de.orchestrator.gas_optimizer_orchestrator.utils.gas.GasAnalysisUtil
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
@@ -138,7 +138,7 @@ class InitialRunOrchestrator(
         compiled: CompiledContract,
         resolved: ResolvedContractInfo
     ): FunctionGasUsed {
-        val signature = SignatureUtil.signature(interaction.functionName, interaction.abiTypes)
+        val signature = AbiDecoder.buildSignature(interaction.functionName, interaction.abiTypes)
 
         logger.debug("Replaying: {} at block {}", signature, interaction.blockNumber)
 
@@ -149,7 +149,7 @@ class InitialRunOrchestrator(
             resolved = resolved
         )
 
-        return GasTrackingUtil.mapOutcomeToFunctionGasUsed(
+        return GasAnalysisUtil.mapOutcomeToResult(
             functionName = interaction.functionName,
             functionSignature = signature,
             outcome = outcome

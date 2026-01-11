@@ -3,7 +3,7 @@ package de.orchestrator.gas_optimizer_orchestrator.service.anvil
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.FullTransaction
-import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil.validateBytecode
+import de.orchestrator.gas_optimizer_orchestrator.utils.bytecode.BytecodeUtil.validateBytecode
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.web3j.protocol.Web3j

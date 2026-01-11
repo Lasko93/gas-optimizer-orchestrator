@@ -7,7 +7,7 @@ import de.orchestrator.gas_optimizer_orchestrator.model.compilation.CompiledIrRu
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.orchestrators.OrchestratorConstants.DEFAULT_OPTIMIZER_RUNS
 import de.orchestrator.gas_optimizer_orchestrator.orchestrators.OrchestratorConstants.DEFAULT_OUT_DIR
-import de.orchestrator.gas_optimizer_orchestrator.utils.CombinedJsonHelper
+import de.orchestrator.gas_optimizer_orchestrator.utils.compiler.CombinedJsonParser
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.io.File
@@ -97,7 +97,7 @@ class CompilationPipeline(
     }
 
     private fun parseCompiledContract(combinedJsonFile: File, contractName: String): CompiledContract {
-        val (creation, runtime, _) = CombinedJsonHelper.extractCreationAndRuntime(
+        val (creation, runtime, _) = CombinedJsonParser.parse(
             objectMapper = objectMapper,
             combinedJsonFile = combinedJsonFile,
             contractName = contractName
@@ -123,7 +123,7 @@ class CompilationPipeline(
         contractName: String
     ): List<CompiledIrRun> {
         return runsList.zip(combinedJsonFiles).map { (runs, file) ->
-            val (creation, runtime, solcVersion) = CombinedJsonHelper.extractCreationAndRuntime(
+            val (creation, runtime, solcVersion) = CombinedJsonParser.parse(
                 objectMapper = objectMapper,
                 combinedJsonFile = file,
                 contractName = contractName

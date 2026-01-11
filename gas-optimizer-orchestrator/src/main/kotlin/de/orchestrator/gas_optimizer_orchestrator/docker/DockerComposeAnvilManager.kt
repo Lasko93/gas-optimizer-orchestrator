@@ -1,5 +1,7 @@
 package de.orchestrator.gas_optimizer_orchestrator.docker
 
+import de.orchestrator.gas_optimizer_orchestrator.utils.docker.DockerCommandExecutor
+import de.orchestrator.gas_optimizer_orchestrator.utils.docker.SimpleHttpClient
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.math.BigInteger
@@ -15,7 +17,8 @@ import java.math.BigInteger
  */
 @Service
 class DockerComposeAnvilManager(
-    private val docker: DockerHelper
+    private val dockerCommandExecutor: DockerCommandExecutor,
+    private val dockerHttpClient: SimpleHttpClient
 ) {
     private val logger = LoggerFactory.getLogger(DockerComposeAnvilManager::class.java)
 
@@ -45,7 +48,7 @@ class DockerComposeAnvilManager(
      */
     fun <T> withAnvilFork(blockNumber: Long, timeStamp: String, fn: () -> T): T {
         startAnvilFork(blockNumber, timeStamp)
-        docker.waitForRpc(rpcUrl)
+        dockerHttpClient.waitForRpc(rpcUrl)
 
         return try {
             fn()
@@ -66,8 +69,8 @@ class DockerComposeAnvilManager(
             timeStamp = timeStamp
         )
 
-        docker.dockerComposeUp(SERVICE_NAME, env = env, detached = true, forceRecreate = true)
-        docker.waitForRpc(rpcUrl)
+        dockerCommandExecutor.composeUp(SERVICE_NAME, env = env, detached = true, forceRecreate = true)
+        dockerHttpClient.waitForRpc(rpcUrl)
 
         logger.debug("Anvil fork ready at block {}", blockNumber)
     }
@@ -222,7 +225,7 @@ class DockerComposeAnvilManager(
 
     private fun executeRpcCall(method: String, params: List<Any>, errorMessage: String) {
         val payload = buildJsonRpcPayload(method, params)
-        val response = docker.postJson(rpcUrl, payload)
+        val response = dockerHttpClient.postJson(rpcUrl, payload)
 
         if (response.code != HTTP_OK) {
             val fullMessage = "$errorMessage: HTTP ${response.code}\n${response.body}"
@@ -233,7 +236,7 @@ class DockerComposeAnvilManager(
 
     private fun executeRpcQuery(method: String, params: List<Any>, errorMessage: String): String {
         val payload = buildJsonRpcPayload(method, params)
-        val response = docker.postJson(rpcUrl, payload)
+        val response = dockerHttpClient.postJson(rpcUrl, payload)
 
         if (response.code != HTTP_OK) {
             val fullMessage = "$errorMessage: HTTP ${response.code}\n${response.body}"

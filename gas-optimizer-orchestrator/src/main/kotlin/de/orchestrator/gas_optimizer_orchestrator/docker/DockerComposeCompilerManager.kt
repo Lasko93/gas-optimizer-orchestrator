@@ -1,7 +1,9 @@
 package de.orchestrator.gas_optimizer_orchestrator.docker
 
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
-import de.orchestrator.gas_optimizer_orchestrator.utils.CompilerHelper
+import de.orchestrator.gas_optimizer_orchestrator.utils.compiler.CompilerScriptBuilder
+import de.orchestrator.gas_optimizer_orchestrator.utils.compiler.SolcVersionUtil
+import de.orchestrator.gas_optimizer_orchestrator.utils.docker.DockerCommandExecutor
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.io.File
@@ -16,13 +18,16 @@ import java.io.File
  */
 @Service
 class DockerComposeCompilerManager(
-    private val docker: DockerHelper,
+    private val dockerCommandExecutor: DockerCommandExecutor,
     private val paths: GasOptimizerPathsProperties
 ) {
     private val logger = LoggerFactory.getLogger(DockerComposeCompilerManager::class.java)
 
     companion object {
         private const val SERVICE_NAME = "compiler"
+        private const val DEFAULT_OUT_DIR = "out"
+        private const val DEFAULT_BASELINE_FILENAME = "baseline_noopt.json"
+        private val DEFAULT_OPTIMIZER_RUNS = listOf(1, 200, 10_000)
     }
 
     private val hostShareDir: File
@@ -47,22 +52,18 @@ class DockerComposeCompilerManager(
         solFileName: String,
         solcVersion: String,
         remappings: List<String> = emptyList(),
-        runsList: List<Int> = listOf(1, 200, 10_000),
-        outDirName: String = "out",
+        runsList: List<Int> = DEFAULT_OPTIMIZER_RUNS,
+        outDirName: String = DEFAULT_OUT_DIR,
         viaIrRuns: Boolean = true
     ): List<File> {
-        logger.info(
-            "Compiling {} with optimizer runs: {} (viaIR={})",
-            solFileName, runsList, viaIrRuns
-        )
+        logger.info("Compiling {} with optimizer runs: {} (viaIR={})", solFileName, runsList, viaIrRuns)
 
-        selectSolcVersion(solcVersion)
-        validateCompilationSetup(solFileName)
+        prepareCompilation(solcVersion, solFileName)
 
         val hostOutDir = ensureOutputDirectory(outDirName)
-        val viaIrConfig = CompilerHelper.resolveViaIrConfig(viaIrRuns, solcVersion)
+        val viaIrConfig = SolcVersionUtil.resolveViaIrConfig(viaIrRuns, solcVersion)
 
-        val script = CompilerHelper.optimizedCompilationScript(
+        val script = CompilerScriptBuilder.optimizedCompilationScript(
             solFileName = solFileName,
             remappings = remappings,
             runsList = runsList,
@@ -93,17 +94,16 @@ class DockerComposeCompilerManager(
         solFileName: String,
         solcVersion: String,
         remappings: List<String> = emptyList(),
-        outFileName: String = "baseline_noopt.json",
-        outDirName: String = "out"
+        outFileName: String = DEFAULT_BASELINE_FILENAME,
+        outDirName: String = DEFAULT_OUT_DIR
     ): File {
         logger.info("Compiling {} without optimization", solFileName)
 
-        selectSolcVersion(solcVersion)
-        validateCompilationSetup(solFileName)
+        prepareCompilation(solcVersion, solFileName)
 
         val hostOutDir = ensureOutputDirectory(outDirName)
 
-        val script = CompilerHelper.baselineCompilationScript(
+        val script = CompilerScriptBuilder.baselineCompilationScript(
             solFileName = solFileName,
             remappings = remappings,
             outDirName = outDirName,
@@ -127,14 +127,10 @@ class DockerComposeCompilerManager(
     fun cleanExternalContractsDir() {
         logger.debug("Cleaning external contracts directory: {}", hostShareDir.absolutePath)
 
-        require(hostShareDir.exists()) {
-            "Host share dir does not exist: ${hostShareDir.absolutePath}"
-        }
-        require(hostShareDir.isDirectory) {
-            "Host share dir is not a directory: ${hostShareDir.absolutePath}"
-        }
+        validateHostShareDir()
 
-        val deletedCount = hostShareDir.listFiles().orEmpty().count { file ->
+        val files = hostShareDir.listFiles().orEmpty()
+        val deletedCount = files.count { file ->
             file.deleteRecursively().also { deleted ->
                 if (!deleted) logger.warn("Failed to delete: {}", file.absolutePath)
             }
@@ -142,10 +138,7 @@ class DockerComposeCompilerManager(
 
         logger.debug("Deleted {} items from external contracts directory", deletedCount)
 
-        val leftover = hostShareDir.listFiles().orEmpty()
-        check(leftover.isEmpty()) {
-            "Failed to clean externalContracts dir. Leftover: ${leftover.joinToString { it.name }}"
-        }
+        validateDirectoryIsEmpty()
     }
 
     // ============================================================
@@ -158,7 +151,7 @@ class DockerComposeCompilerManager(
     fun selectSolcVersion(solcVersionRaw: String) {
         logger.debug("Selecting solc version: {}", solcVersionRaw)
 
-        val script = CompilerHelper.solcSelectScript(solcVersionRaw)
+        val script = CompilerScriptBuilder.solcSelectScript(solcVersionRaw)
         executeCompilerScript(script)
     }
 
@@ -166,10 +159,29 @@ class DockerComposeCompilerManager(
     // Private Helpers
     // ============================================================
 
-    private fun validateCompilationSetup(solFileName: String) {
+    private fun prepareCompilation(solcVersion: String, solFileName: String) {
+        selectSolcVersion(solcVersion)
+        validateCompilationSetup(solFileName)
+    }
+
+    private fun validateHostShareDir() {
         require(hostShareDir.exists()) {
             "Host share dir does not exist: ${hostShareDir.absolutePath}"
         }
+        require(hostShareDir.isDirectory) {
+            "Host share dir is not a directory: ${hostShareDir.absolutePath}"
+        }
+    }
+
+    private fun validateDirectoryIsEmpty() {
+        val leftover = hostShareDir.listFiles().orEmpty()
+        check(leftover.isEmpty()) {
+            "Failed to clean externalContracts dir. Leftover: ${leftover.joinToString { it.name }}"
+        }
+    }
+
+    private fun validateCompilationSetup(solFileName: String) {
+        validateHostShareDir()
 
         val hostSolFile = File(hostShareDir, solFileName)
         require(hostSolFile.exists()) {
@@ -188,6 +200,6 @@ class DockerComposeCompilerManager(
 
     private fun executeCompilerScript(script: String) {
         logger.trace("Executing compiler script:\n{}", script)
-        docker.dockerComposeExecBash(SERVICE_NAME, script, tty = false)
+        dockerCommandExecutor.composeExecBash(SERVICE_NAME, script, tty = false)
     }
 }
