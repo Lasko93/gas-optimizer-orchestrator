@@ -1,4 +1,4 @@
-package de.orchestrator.gas_optimizer_orchestrator.service
+package de.orchestrator.gas_optimizer_orchestrator.service.compilation
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeCompilerManager

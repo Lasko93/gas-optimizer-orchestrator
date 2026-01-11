@@ -1,4 +1,4 @@
-package de.orchestrator.gas_optimizer_orchestrator.service
+package de.orchestrator.gas_optimizer_orchestrator.service.compilation
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -6,6 +6,7 @@ import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSource
 import org.springframework.stereotype.Service
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.collections.iterator
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory

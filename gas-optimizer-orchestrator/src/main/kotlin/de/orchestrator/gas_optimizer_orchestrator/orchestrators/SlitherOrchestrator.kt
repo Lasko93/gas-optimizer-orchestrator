@@ -5,7 +5,7 @@ import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeCompilerMa
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractSourceCodeResult
 import de.orchestrator.gas_optimizer_orchestrator.model.slither.SlitherReport
 import de.orchestrator.gas_optimizer_orchestrator.service.slither.SlitherService
-import de.orchestrator.gas_optimizer_orchestrator.service.SourceCodeParserService
+import de.orchestrator.gas_optimizer_orchestrator.service.compilation.SourceCodeParserService
 import org.springframework.stereotype.Service
 
 @Service
