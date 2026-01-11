@@ -29,7 +29,7 @@ class AnvilInteractionService(
     private val logger = LoggerFactory.getLogger(AnvilInteractionService::class.java)
 
     companion object {
-        private val DEFAULT_GAS_LIMIT = BigInteger("10000000")
+        private val DEFAULT_GAS_LIMIT = BigInteger("15000000")
         private val DEFAULT_FUNDING_AMOUNT = BigInteger.TEN.pow(20) // 100 ETH
         private const val RECEIPT_POLL_INTERVAL_MS = 500L
         private const val SUCCESS_STATUS = "0x1"
