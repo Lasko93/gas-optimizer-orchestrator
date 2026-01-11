@@ -12,20 +12,6 @@ import org.springframework.stereotype.Service
  * This service orchestrates the resolution process by delegating to:
  * - [ProxyResolver] for proxy detection and implementation resolution
  * - [ContractDataAggregator] for fetching ABIs, transactions, and creation info
- *
- * ## Usage Example
- * ```kotlin
- * val resolver = contractResolverService.resolveContract("0x...")
- *
- * when (resolver) {
- *     is ContractResolution.DirectContract -> {
- *         println("Direct contract: ${resolver.address}")
- *     }
- *     is ContractResolution.ProxyContract -> {
- *         println("Proxy: ${resolver.proxyAddress} → ${resolver.implementationAddress}")
- *     }
- * }
- * ```
  */
 @Service
 class ContractResolverService(

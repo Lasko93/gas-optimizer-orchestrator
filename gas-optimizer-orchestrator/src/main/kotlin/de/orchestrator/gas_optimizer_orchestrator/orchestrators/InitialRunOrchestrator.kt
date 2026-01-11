@@ -2,19 +2,38 @@ package de.orchestrator.gas_optimizer_orchestrator.orchestrators
 
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
 import de.orchestrator.gas_optimizer_orchestrator.model.CompilerInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
+import de.orchestrator.gas_optimizer_orchestrator.model.FunctionGasUsed
 import de.orchestrator.gas_optimizer_orchestrator.model.GasProfile
 import de.orchestrator.gas_optimizer_orchestrator.model.GasTrackingResults
-import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ResolvedContractInfo
 import de.orchestrator.gas_optimizer_orchestrator.model.RunContext
+import de.orchestrator.gas_optimizer_orchestrator.model.compilation.CompiledContract
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ContractResolution
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ResolvedContractInfo
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.effectiveSourceMeta
+import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.toResolvedContractInfo
+import de.orchestrator.gas_optimizer_orchestrator.orchestrators.OrchestratorConstants.DEFAULT_CHAIN_ID
+import de.orchestrator.gas_optimizer_orchestrator.orchestrators.OrchestratorConstants.DEFAULT_RPC_URL
 import de.orchestrator.gas_optimizer_orchestrator.service.AnvilInteractionService
 import de.orchestrator.gas_optimizer_orchestrator.service.CompilationPipeline
 import de.orchestrator.gas_optimizer_orchestrator.service.ForkReplayService
 import de.orchestrator.gas_optimizer_orchestrator.service.InteractionCreationService
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
-import de.orchestrator.gas_optimizer_orchestrator.utils.GasTrackingUtil.mapOutcomeToFunctionGasUsed
+import de.orchestrator.gas_optimizer_orchestrator.utils.GasTrackingUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.SignatureUtil
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
+/**
+ * Orchestrates the initial (baseline) gas analysis run.
+ *
+ * This orchestrator:
+ * 1. Compiles the contract without optimization
+ * 2. Measures deployment gas
+ * 3. Replays historical transactions to measure function call gas
+ *
+ * The results serve as a baseline for comparing optimized versions.
+ */
 @Service
 class InitialRunOrchestrator(
     private val compilationPipeline: CompilationPipeline,
@@ -23,47 +42,127 @@ class InitialRunOrchestrator(
     private val forkReplayService: ForkReplayService,
     private val paths: GasOptimizerPathsProperties
 ) {
+    private val logger = LoggerFactory.getLogger(InitialRunOrchestrator::class.java)
 
-    fun runInitial(resolved: ResolvedContractInfo): GasTrackingResults {
+    // ============================================================
+    // Public API
+    // ============================================================
 
+    /**
+     * Runs the initial gas analysis using the new ContractResolution sealed class.
+     */
+    fun run(resolution: ContractResolution): GasTrackingResults {
+        logger.info("Starting initial run for: {}", resolution.effectiveSourceMeta.contractName)
+
+        val resolved = resolution.toResolvedContractInfo()
+        return executeInitialRun(resolved)
+    }
+
+
+    // ============================================================
+    // Core Orchestration
+    // ============================================================
+
+    private fun executeInitialRun(resolved: ResolvedContractInfo): GasTrackingResults {
+
+        // Step 1: Compile contract without optimization
+        val compiled = compileBaseline(resolved)
+        logger.info("Baseline compilation complete")
+
+        // Step 2: Measure deployment gas
+        val deploymentGas = measureDeploymentGas(compiled, resolved)
+        logger.info("Deployment gas measured: {}", deploymentGas)
+
+        // Step 3: Build interactions from historical transactions
+        val interactions = buildInteractions(resolved)
+        logger.info("Built {} interactions for replay", interactions.size)
+
+        // Step 4: Replay interactions and measure gas
+        val functionCalls = replayInteractions(interactions, compiled, resolved)
+        logger.info("Replayed {} function calls", functionCalls.size)
+
+        // Step 5: Assemble results
+        return assembleResults(resolved, compiled, deploymentGas, functionCalls)
+    }
+
+    // ============================================================
+    // Step Implementations
+    // ============================================================
+
+    private fun compileBaseline(resolved: ResolvedContractInfo): CompiledContract {
         val srcMeta = resolved.sourceToCompile
 
-        // 1) Compile + get deploy bytecode
-        val compiled = compilationPipeline.compileBaselineNoOptimize(
+        return compilationPipeline.compileBaseline(
             srcMeta = srcMeta,
             externalContractsDir = paths.externalContractsDir,
-            outFileName = srcMeta.contractName + ".json"
+            outFileName = "${srcMeta.contractName}.json"
         )
+    }
+
+    private fun measureDeploymentGas(
+        compiled: CompiledContract,
+        resolved: ResolvedContractInfo
+    ): Long {
+        val srcMeta = resolved.sourceToCompile
 
         val deployBytecode = BytecodeUtil.appendConstructorArgs(
             bytecode = compiled.creationBytecode,
             constructorArgsHex = srcMeta.constructorArgumentsHex
         )
 
-        // Measure deployment gas on a separate fork
-        val deployReceipt = anvilService.deployOnFork(deployBytecode, resolved.creationTransaction)
-        val deploymentGasUsed = deployReceipt.gasUsed?.toLong() ?: 0L
+        val receipt = anvilService.deployOnFork(deployBytecode, resolved.creationTransaction)
 
-        // 2) Build interactions (they'll be retargeted during each replay)
-        val interactions = interactionCreationService.buildInteractions(
+        return receipt.gasUsed?.toLong() ?: 0L
+    }
+
+    private fun buildInteractions(resolved: ResolvedContractInfo): List<ExecutableInteraction> {
+        return interactionCreationService.buildInteractions(
             abiJson = resolved.abiJson,
             contractAddress = resolved.interactionAddress,
             transactions = resolved.transactions
         )
+    }
 
-        // 3) Replay each interaction with baseline contract deployed fresh in each fork
-        val functionCalls = interactions.map { interaction ->
-            val signature = SignatureUtil.signature(interaction.functionName, interaction.abiTypes)
-
-            val outcome = forkReplayService.replayWithCustomContract(
-                interaction = interaction,
-                creationBytecode = compiled.creationBytecode,
-                constructorArgsHex = resolved.constructorArgsHex,
-                resolved = resolved
-            )
-
-            mapOutcomeToFunctionGasUsed(interaction.functionName, signature, outcome)
+    private fun replayInteractions(
+        interactions: List<ExecutableInteraction>,
+        compiled: CompiledContract,
+        resolved: ResolvedContractInfo
+    ): List<FunctionGasUsed> {
+        return interactions.map { interaction ->
+            replaySingleInteraction(interaction, compiled, resolved)
         }
+    }
+
+    private fun replaySingleInteraction(
+        interaction: ExecutableInteraction,
+        compiled: CompiledContract,
+        resolved: ResolvedContractInfo
+    ): FunctionGasUsed {
+        val signature = SignatureUtil.signature(interaction.functionName, interaction.abiTypes)
+
+        logger.debug("Replaying: {} at block {}", signature, interaction.blockNumber)
+
+        val outcome = forkReplayService.replayWithCustomContract(
+            interaction = interaction,
+            creationBytecode = compiled.creationBytecode,
+            constructorArgsHex = resolved.constructorArgsHex,
+            resolved = resolved
+        )
+
+        return GasTrackingUtil.mapOutcomeToFunctionGasUsed(
+            functionName = interaction.functionName,
+            functionSignature = signature,
+            outcome = outcome
+        )
+    }
+
+    private fun assembleResults(
+        resolved: ResolvedContractInfo,
+        compiled: CompiledContract,
+        deploymentGas: Long,
+        functionCalls: List<FunctionGasUsed>
+    ): GasTrackingResults {
+        val srcMeta = resolved.sourceToCompile
 
         return GasTrackingResults(
             contractName = resolved.contractName,
@@ -72,12 +171,12 @@ class InitialRunOrchestrator(
             runtimeBytecode = compiled.runtimeBytecode,
             compilerInfo = CompilerInfo(solcVersion = srcMeta.compilerVersion),
             gasProfile = GasProfile(
-                deploymentGasUsed = deploymentGasUsed,
+                deploymentGasUsed = deploymentGas,
                 functionCalls = functionCalls
             ),
             runContext = RunContext(
-                chainId = 1L,
-                rpcUrl = "http://localhost:8545"
+                chainId = DEFAULT_CHAIN_ID,
+                rpcUrl = DEFAULT_RPC_URL
             )
         )
     }

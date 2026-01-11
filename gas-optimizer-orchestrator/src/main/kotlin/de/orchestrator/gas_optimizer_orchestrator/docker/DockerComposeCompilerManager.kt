@@ -2,17 +2,47 @@ package de.orchestrator.gas_optimizer_orchestrator.docker
 
 import de.orchestrator.gas_optimizer_orchestrator.config.GasOptimizerPathsProperties
 import de.orchestrator.gas_optimizer_orchestrator.utils.CompilerHelper
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.io.File
 
+/**
+ * Manages Docker-based Solidity compilation.
+ *
+ * Provides methods for:
+ * - Baseline compilation (no optimization)
+ * - Optimized compilation with various run settings
+ * - Solc version management
+ */
 @Service
 class DockerComposeCompilerManager(
     private val docker: DockerHelper,
     private val paths: GasOptimizerPathsProperties
 ) {
-    private val serviceName = "compiler"
-    private val hostShareDir = paths.externalContractsDir.toFile()
+    private val logger = LoggerFactory.getLogger(DockerComposeCompilerManager::class.java)
 
+    companion object {
+        private const val SERVICE_NAME = "compiler"
+    }
+
+    private val hostShareDir: File
+        get() = paths.externalContractsDir.toFile()
+
+    // ============================================================
+    // Public Compilation Methods
+    // ============================================================
+
+    /**
+     * Compiles with various optimizer run settings.
+     *
+     * @param solFileName The main Solidity file name
+     * @param solcVersion The compiler version to use
+     * @param remappings Import remappings (e.g., "@openzeppelin/=lib/openzeppelin/")
+     * @param runsList List of optimizer run values to compile with
+     * @param outDirName Output directory name
+     * @param viaIrRuns Whether to use the IR-based optimizer
+     * @return List of compiled JSON files, one per run setting
+     */
     fun compileViaSolcOptimizer(
         solFileName: String,
         solcVersion: String,
@@ -21,12 +51,17 @@ class DockerComposeCompilerManager(
         outDirName: String = "out",
         viaIrRuns: Boolean = true
     ): List<File> {
-        useSolcVersion(solcVersion)
+        logger.info(
+            "Compiling {} with optimizer runs: {} (viaIR={})",
+            solFileName, runsList, viaIrRuns
+        )
 
-        requireValidSetup(solFileName)
-        val hostOutDir = File(hostShareDir, outDirName).apply { mkdirs() }
+        selectSolcVersion(solcVersion)
+        validateCompilationSetup(solFileName)
 
+        val hostOutDir = ensureOutputDirectory(outDirName)
         val viaIrConfig = CompilerHelper.resolveViaIrConfig(viaIrRuns, solcVersion)
+
         val script = CompilerHelper.optimizedCompilationScript(
             solFileName = solFileName,
             remappings = remappings,
@@ -35,11 +70,25 @@ class DockerComposeCompilerManager(
             viaIrConfig = viaIrConfig
         )
 
-        docker.dockerComposeExecBash(serviceName, script, tty = false)
+        executeCompilerScript(script)
 
-        return runsList.map { File(hostOutDir, "${viaIrConfig.filePrefix}$it.json") }
+        return runsList.map { runs ->
+            File(hostOutDir, "${viaIrConfig.filePrefix}$runs.json").also {
+                logger.debug("Output file: {}", it.absolutePath)
+            }
+        }
     }
 
+    /**
+     * Compiles without optimization (baseline).
+     *
+     * @param solFileName The main Solidity file name
+     * @param solcVersion The compiler version to use
+     * @param remappings Import remappings
+     * @param outFileName Output file name
+     * @param outDirName Output directory name
+     * @return The compiled JSON file
+     */
     fun compileSolcNoOptimizeCombinedJson(
         solFileName: String,
         solcVersion: String,
@@ -47,10 +96,12 @@ class DockerComposeCompilerManager(
         outFileName: String = "baseline_noopt.json",
         outDirName: String = "out"
     ): File {
-        useSolcVersion(solcVersion)
+        logger.info("Compiling {} without optimization", solFileName)
 
-        requireValidSetup(solFileName)
-        val hostOutDir = File(hostShareDir, outDirName).apply { mkdirs() }
+        selectSolcVersion(solcVersion)
+        validateCompilationSetup(solFileName)
+
+        val hostOutDir = ensureOutputDirectory(outDirName)
 
         val script = CompilerHelper.baselineCompilationScript(
             solFileName = solFileName,
@@ -59,16 +110,37 @@ class DockerComposeCompilerManager(
             outFileName = outFileName
         )
 
-        docker.dockerComposeExecBash(serviceName, script, tty = false)
+        executeCompilerScript(script)
 
-        return File(hostOutDir, outFileName)
+        return File(hostOutDir, outFileName).also {
+            logger.debug("Output file: {}", it.absolutePath)
+        }
     }
 
-    fun cleanExternalContractsDir() {
-        require(hostShareDir.exists()) { "Host share dir does not exist: ${hostShareDir.absolutePath}" }
-        require(hostShareDir.isDirectory) { "Host share dir is not a directory: ${hostShareDir.absolutePath}" }
+    // ============================================================
+    // Directory Management
+    // ============================================================
 
-        hostShareDir.listFiles().orEmpty().forEach { it.deleteRecursively() }
+    /**
+     * Cleans the external contracts directory, removing all files.
+     */
+    fun cleanExternalContractsDir() {
+        logger.debug("Cleaning external contracts directory: {}", hostShareDir.absolutePath)
+
+        require(hostShareDir.exists()) {
+            "Host share dir does not exist: ${hostShareDir.absolutePath}"
+        }
+        require(hostShareDir.isDirectory) {
+            "Host share dir is not a directory: ${hostShareDir.absolutePath}"
+        }
+
+        val deletedCount = hostShareDir.listFiles().orEmpty().count { file ->
+            file.deleteRecursively().also { deleted ->
+                if (!deleted) logger.warn("Failed to delete: {}", file.absolutePath)
+            }
+        }
+
+        logger.debug("Deleted {} items from external contracts directory", deletedCount)
 
         val leftover = hostShareDir.listFiles().orEmpty()
         check(leftover.isEmpty()) {
@@ -76,14 +148,46 @@ class DockerComposeCompilerManager(
         }
     }
 
-    fun useSolcVersion(solcVersionRaw: String) {
+    // ============================================================
+    // Version Management
+    // ============================================================
+
+    /**
+     * Selects a specific solc version in the compiler container.
+     */
+    fun selectSolcVersion(solcVersionRaw: String) {
+        logger.debug("Selecting solc version: {}", solcVersionRaw)
+
         val script = CompilerHelper.solcSelectScript(solcVersionRaw)
-        docker.dockerComposeExecBash(serviceName, script, tty = false)
+        executeCompilerScript(script)
     }
 
-    private fun requireValidSetup(solFileName: String) {
-        require(hostShareDir.exists()) { "Host share dir does not exist: ${hostShareDir.absolutePath}" }
-        val hostSol = File(hostShareDir, solFileName)
-        require(hostSol.exists()) { "Solidity file not found: ${hostSol.absolutePath}" }
+    // ============================================================
+    // Private Helpers
+    // ============================================================
+
+    private fun validateCompilationSetup(solFileName: String) {
+        require(hostShareDir.exists()) {
+            "Host share dir does not exist: ${hostShareDir.absolutePath}"
+        }
+
+        val hostSolFile = File(hostShareDir, solFileName)
+        require(hostSolFile.exists()) {
+            "Solidity file not found: ${hostSolFile.absolutePath}"
+        }
+
+        logger.debug("Validated compilation setup for: {}", solFileName)
+    }
+
+    private fun ensureOutputDirectory(outDirName: String): File {
+        return File(hostShareDir, outDirName).apply {
+            mkdirs()
+            logger.debug("Ensured output directory: {}", absolutePath)
+        }
+    }
+
+    private fun executeCompilerScript(script: String) {
+        logger.trace("Executing compiler script:\n{}", script)
+        docker.dockerComposeExecBash(SERVICE_NAME, script, tty = false)
     }
 }
