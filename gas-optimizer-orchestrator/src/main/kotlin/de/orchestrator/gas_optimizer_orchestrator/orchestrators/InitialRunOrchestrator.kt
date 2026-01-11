@@ -13,7 +13,6 @@ import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.ResolvedContra
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.effectiveSourceMeta
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.toResolvedContractInfo
 import de.orchestrator.gas_optimizer_orchestrator.orchestrators.OrchestratorConstants.DEFAULT_CHAIN_ID
-import de.orchestrator.gas_optimizer_orchestrator.orchestrators.OrchestratorConstants.DEFAULT_RPC_URL
 import de.orchestrator.gas_optimizer_orchestrator.service.anvil.AnvilInteractionService
 import de.orchestrator.gas_optimizer_orchestrator.service.compilation.CompilationPipeline
 import de.orchestrator.gas_optimizer_orchestrator.service.anvil.ForkReplayService
@@ -22,6 +21,7 @@ import de.orchestrator.gas_optimizer_orchestrator.utils.bytecode.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.abi.AbiDecoder
 import de.orchestrator.gas_optimizer_orchestrator.utils.gas.GasAnalysisUtil
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 /**
@@ -40,7 +40,10 @@ class InitialRunOrchestrator(
     private val anvilService: AnvilInteractionService,
     private val interactionCreationService: InteractionCreationService,
     private val forkReplayService: ForkReplayService,
-    private val paths: GasOptimizerPathsProperties
+    private val paths: GasOptimizerPathsProperties,
+    @Value("\${web3.http-url:http://127.0.0.1:8545}")
+    private val rpcUrl: String
+
 ) {
     private val logger = LoggerFactory.getLogger(InitialRunOrchestrator::class.java)
 
@@ -176,7 +179,7 @@ class InitialRunOrchestrator(
             ),
             runContext = RunContext(
                 chainId = DEFAULT_CHAIN_ID,
-                rpcUrl = DEFAULT_RPC_URL
+                rpcUrl = rpcUrl
             )
         )
     }

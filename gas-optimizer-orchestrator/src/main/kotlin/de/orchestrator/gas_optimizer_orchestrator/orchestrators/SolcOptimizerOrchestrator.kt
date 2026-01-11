@@ -23,6 +23,7 @@ import de.orchestrator.gas_optimizer_orchestrator.utils.bytecode.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.abi.AbiDecoder
 import de.orchestrator.gas_optimizer_orchestrator.utils.gas.GasAnalysisUtil
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 
 /**
@@ -42,7 +43,9 @@ class SolcOptimizerOrchestrator(
     private val anvilService: AnvilInteractionService,
     private val interactionCreationService: InteractionCreationService,
     private val forkReplayService: ForkReplayService,
-    private val paths: GasOptimizerPathsProperties
+    private val paths: GasOptimizerPathsProperties,
+    @Value("\${web3.http-url:http://127.0.0.1:8545}")
+    private val rpcUrl: String
 ) {
     private val logger = LoggerFactory.getLogger(SolcOptimizerOrchestrator::class.java)
 
@@ -200,7 +203,7 @@ class SolcOptimizerOrchestrator(
             ),
             runContext = RunContext(
                 chainId = OrchestratorConstants.DEFAULT_CHAIN_ID,
-                rpcUrl = anvilManager.rpcUrl
+                rpcUrl = rpcUrl
             )
         )
     }

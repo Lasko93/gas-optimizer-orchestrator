@@ -3,6 +3,7 @@ package de.orchestrator.gas_optimizer_orchestrator.docker
 import de.orchestrator.gas_optimizer_orchestrator.utils.docker.DockerCommandExecutor
 import de.orchestrator.gas_optimizer_orchestrator.utils.docker.SimpleHttpClient
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.math.BigInteger
 
@@ -18,7 +19,9 @@ import java.math.BigInteger
 @Service
 class DockerComposeAnvilManager(
     private val dockerCommandExecutor: DockerCommandExecutor,
-    private val dockerHttpClient: SimpleHttpClient
+    private val dockerHttpClient: SimpleHttpClient,
+    @Value("\${web3.http-url:http://127.0.0.1:8545}")
+    private val rpcUrl: String
 ) {
     private val logger = LoggerFactory.getLogger(DockerComposeAnvilManager::class.java)
 
@@ -32,7 +35,6 @@ class DockerComposeAnvilManager(
         private const val NOT_ENTERED_VALUE = "1"
     }
 
-    val rpcUrl = "http://localhost:8545"
 
     // ============================================================
     // Fork Lifecycle
