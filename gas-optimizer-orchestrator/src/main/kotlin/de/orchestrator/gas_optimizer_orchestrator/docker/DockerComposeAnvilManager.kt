@@ -1,198 +1,277 @@
 package de.orchestrator.gas_optimizer_orchestrator.docker
 
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.math.BigInteger
 
+/**
+ * Manages Anvil blockchain instances via Docker Compose.
+ *
+ * Provides methods for:
+ * - Starting/stopping Anvil forks
+ * - Account impersonation and funding
+ * - Storage and bytecode manipulation
+ * - State queries (storage, code)
+ */
 @Service
 class DockerComposeAnvilManager(
     private val docker: DockerHelper
 ) {
+    private val logger = LoggerFactory.getLogger(DockerComposeAnvilManager::class.java)
+
+    companion object {
+        private const val SERVICE_NAME = "anvil"
+        private const val ALCHEMY_API_KEY_ENV = "ALCHEMY_API_KEY"
+        private const val HTTP_OK = 200
+        private const val SLOT_HEX_LENGTH = 64
+
+        // Reentrancy guard constants
+        private const val NOT_ENTERED_VALUE = "1"
+    }
+
     val rpcUrl = "http://localhost:8545"
 
-    fun <T> withAnvilFork(blockNumber: Long,timeStamp: String, fn: () -> T): T {
+    // ============================================================
+    // Fork Lifecycle
+    // ============================================================
+
+    /**
+     * Executes a function within an Anvil fork context.
+     *
+     * @param blockNumber Block number to fork from
+     * @param timeStamp Timestamp to set on the fork
+     * @param fn Function to execute on the fork
+     * @return Result of the function
+     */
+    fun <T> withAnvilFork(blockNumber: Long, timeStamp: String, fn: () -> T): T {
         startAnvilFork(blockNumber, timeStamp)
         docker.waitForRpc(rpcUrl)
+
         return try {
             fn()
         } finally {
-            // optional: stop/cleanup
+
         }
     }
 
+    /**
+     * Starts an Anvil fork at a specific block.
+     */
     fun startAnvilFork(blockNumber: Long, timeStamp: String = "0") {
-        val env = mapOf(
-            "ENABLE_FORK" to "true",
-            "ANVIL_FORK_BLOCK" to blockNumber.toString(),
-            "ALCHEMY_API_KEY" to (System.getenv("ALCHEMY_API_KEY") ?: ""),
-            "ANVIL_TIMESTAMP" to timeStamp
+        logger.info("Starting Anvil fork at block {}", blockNumber)
+
+        val env = buildForkEnvironment(
+            enableFork = true,
+            blockNumber = blockNumber,
+            timeStamp = timeStamp
         )
 
-        println("Starting Anvil fork at block $blockNumber")
-        docker.dockerComposeUp("anvil", env = env, detached = true, forceRecreate = true)
+        docker.dockerComposeUp(SERVICE_NAME, env = env, detached = true, forceRecreate = true)
         docker.waitForRpc(rpcUrl)
+
+        logger.debug("Anvil fork ready at block {}", blockNumber)
     }
 
-    fun startAnvilNoFork(genesisTimestamp: String? = "0") {
-        val env = mapOf(
-            "ENABLE_FORK" to "false",
-            "ALCHEMY_API_KEY" to "",
-            "ANVIL_FORK_BLOCK" to "0",
-            "ANVIL_TIMESTAMP" to genesisTimestamp.toString()
-        )
 
-        println("Starting Anvil WITHOUT fork (timestamp=${genesisTimestamp ?: "default"})")
-        docker.dockerComposeUp("anvil", env = env, detached = true, forceRecreate = true)
-        docker.waitForRpc(rpcUrl)
-    }
+    private fun buildForkEnvironment(
+        enableFork: Boolean,
+        blockNumber: Long,
+        timeStamp: String
+    ): Map<String, String> = mapOf(
+        "ENABLE_FORK" to enableFork.toString(),
+        "ANVIL_FORK_BLOCK" to blockNumber.toString(),
+        "ALCHEMY_API_KEY" to (System.getenv(ALCHEMY_API_KEY_ENV) ?: ""),
+        "ANVIL_TIMESTAMP" to timeStamp
+    )
 
-    fun replaceRuntimeBytecode(address: String, runtimeBytecode: String) {
-        require(address.startsWith("0x")) { "Address must start with 0x" }
-        require(runtimeBytecode.startsWith("0x")) { "Runtime bytecode must start with 0x" }
+    // ============================================================
+    // Account Management
+    // ============================================================
 
-        val payload = """
-            {
-              "jsonrpc":"2.0",
-              "id":1,
-              "method":"anvil_setCode",
-              "params":["$address","$runtimeBytecode"]
-            }
-        """.trimIndent()
-
-        val resp = docker.postJson(rpcUrl, payload)
-
-        if (resp.code != 200) {
-            throw IllegalStateException("Failed to replace runtime bytecode: HTTP ${resp.code}\n${resp.body}")
-        }
-
-        println("✔ anvil_setCode succeeded for $address")
-    }
-    fun setBalance(address: String, balanceWei: BigInteger) {
-        require(address.startsWith("0x")) { "Address must start with 0x" }
-
-        val hexBalance = "0x" + balanceWei.toString(16)
-        val payload = """
-        {
-          "jsonrpc":"2.0",
-          "id":1,
-          "method":"anvil_setBalance",
-          "params":["$address","$hexBalance"]
-        }
-    """.trimIndent()
-
-        val resp = docker.postJson(rpcUrl, payload)
-
-        if (resp.code != 200) {
-            throw IllegalStateException("Failed to set balance: HTTP ${resp.code}\n${resp.body}")
-        }
-
-        println("✔ anvil_setBalance succeeded for $address ($hexBalance wei)")
-    }
-
+    /**
+     * Impersonates an account, allowing transactions from it without a private key.
+     */
     fun impersonateAccount(address: String) {
-        require(address.startsWith("0x")) { "Address must start with 0x" }
+        validateAddress(address)
 
-        val payload = """
-        {
-          "jsonrpc":"2.0",
-          "id":1,
-          "method":"anvil_impersonateAccount",
-          "params":["$address"]
-        }
-    """.trimIndent()
+        logger.debug("Impersonating account: {}", address)
 
-        val resp = docker.postJson(rpcUrl, payload)
+        executeRpcCall(
+            method = "anvil_impersonateAccount",
+            params = listOf(address),
+            errorMessage = "Failed to impersonate account"
+        )
 
-        if (resp.code != 200) {
-            throw IllegalStateException("Failed to impersonate account: HTTP ${resp.code}\n${resp.body}")
-        }
-
-        println("✔ Impersonating $address")
+        logger.trace("Impersonation active for {}", address)
     }
 
+    /**
+     * Sets the ETH balance of an account.
+     */
+    fun setBalance(address: String, balanceWei: BigInteger) {
+        validateAddress(address)
+
+        val hexBalance = "0x${balanceWei.toString(16)}"
+        logger.debug("Setting balance for {}: {} wei", address, hexBalance)
+
+        executeRpcCall(
+            method = "anvil_setBalance",
+            params = listOf(address, hexBalance),
+            errorMessage = "Failed to set balance"
+        )
+
+        logger.trace("Balance set for {} to {}", address, hexBalance)
+    }
+
+    // ============================================================
+    // Bytecode Manipulation
+    // ============================================================
+
+    /**
+     * Replaces the runtime bytecode at an address.
+     */
+    fun replaceRuntimeBytecode(address: String, runtimeBytecode: String) {
+        validateAddress(address)
+        validateHexData(runtimeBytecode, "Runtime bytecode")
+
+        logger.debug("Replacing bytecode at {} ({} bytes)", address, (runtimeBytecode.length - 2) / 2)
+
+        executeRpcCall(
+            method = "anvil_setCode",
+            params = listOf(address, runtimeBytecode),
+            errorMessage = "Failed to replace runtime bytecode"
+        )
+
+        logger.trace("Bytecode replaced at {}", address)
+    }
+
+    /**
+     * Gets the bytecode at an address.
+     */
+    fun getCode(address: String): String {
+        validateAddress(address)
+
+        logger.trace("Getting code at {}", address)
+
+        return executeRpcQuery(
+            method = "eth_getCode",
+            params = listOf(address, "latest"),
+            errorMessage = "Failed to get code"
+        )
+    }
+
+    // ============================================================
+    // Storage Manipulation
+    // ============================================================
+
+    /**
+     * Sets a storage slot value at an address.
+     */
     fun setStorageAt(address: String, storageSlot: String, value: String) {
-        require(address.startsWith("0x")) { "Address must start with 0x" }
-        require(storageSlot.startsWith("0x")) { "Storage slot must start with 0x" }
-        require(value.startsWith("0x")) { "Value must start with 0x" }
+        validateAddress(address)
+        validateHexData(storageSlot, "Storage slot")
+        validateHexData(value, "Value")
 
-        val payload = """
-        {
-          "jsonrpc":"2.0",
-          "id":1,
-          "method":"anvil_setStorageAt",
-          "params":["$address","$storageSlot","$value"]
-        }
-    """.trimIndent()
+        logger.debug("Setting storage at {} slot {} = {}", address, storageSlot, value)
 
-        val resp = docker.postJson(rpcUrl, payload)
+        executeRpcCall(
+            method = "anvil_setStorageAt",
+            params = listOf(address, storageSlot, value),
+            errorMessage = "Failed to set storage"
+        )
 
-        if (resp.code != 200) {
-            throw IllegalStateException("Failed to set storage: HTTP ${resp.code}\n${resp.body}")
-        }
-
-        println("✔ anvil_setStorageAt succeeded for $address at slot $storageSlot")
+        logger.trace("Storage set at {} slot {}", address, storageSlot)
     }
 
+    /**
+     * Gets a storage slot value at an address.
+     */
+    fun getStorageAt(address: String, storageSlot: String): String {
+        validateAddress(address)
+        validateHexData(storageSlot, "Storage slot")
+
+        logger.trace("Getting storage at {} slot {}", address, storageSlot)
+
+        return executeRpcQuery(
+            method = "eth_getStorageAt",
+            params = listOf(address, storageSlot, "latest"),
+            errorMessage = "Failed to get storage"
+        )
+    }
+
+    /**
+     * Resets a reentrancy guard to NOT_ENTERED state.
+     *
+     * @param address Contract address
+     * @param slotIndex Storage slot index where _status is stored
+     */
     fun resetReentrancyGuard(address: String, slotIndex: Int = 0) {
-        // Reentrancy guards typically use value 1 for NOT_ENTERED
-        // The slot index depends on where the _status variable is declared in the contract
-        val slot = "0x" + slotIndex.toString(16).padStart(64, '0')
-        val notEnteredValue = "0x" + "1".padStart(64, '0')
+        val slot = formatStorageSlot(slotIndex)
+        val notEnteredValue = formatStorageValue(NOT_ENTERED_VALUE)
+
+        logger.debug("Resetting reentrancy guard at {} slot {}", address, slotIndex)
 
         setStorageAt(address, slot, notEnteredValue)
-        println("✔ Reset reentrancy guard for $address (slot $slotIndex)")
+
+        logger.info("Reset reentrancy guard for {} (slot {})", address, slotIndex)
     }
 
-    fun getStorageAt(address: String, storageSlot: String): String {
-        require(address.startsWith("0x")) { "Address must start with 0x" }
-        require(storageSlot.startsWith("0x")) { "Storage slot must start with 0x" }
+    // ============================================================
+    // RPC Helpers
+    // ============================================================
 
-        val payload = """
-        {
-          "jsonrpc":"2.0",
-          "id":1,
-          "method":"eth_getStorageAt",
-          "params":["$address","$storageSlot","latest"]
+    private fun executeRpcCall(method: String, params: List<Any>, errorMessage: String) {
+        val payload = buildJsonRpcPayload(method, params)
+        val response = docker.postJson(rpcUrl, payload)
+
+        if (response.code != HTTP_OK) {
+            val fullMessage = "$errorMessage: HTTP ${response.code}\n${response.body}"
+            logger.error(fullMessage)
+            throw IllegalStateException(fullMessage)
         }
-    """.trimIndent()
-
-        val resp = docker.postJson(rpcUrl, payload)
-
-        if (resp.code != 200) {
-            throw IllegalStateException("Failed to get storage: HTTP ${resp.code}\n${resp.body}")
-        }
-
-        // Parse JSON response to extract result
-        // Response format: {"jsonrpc":"2.0","id":1,"result":"0x..."}
-        val resultRegex = """"result"\s*:\s*"(0x[0-9a-fA-F]+)"""".toRegex()
-        val match = resultRegex.find(resp.body)
-            ?: throw IllegalStateException("Could not parse storage value from response: ${resp.body}")
-
-        return match.groupValues[1]
     }
 
+    private fun executeRpcQuery(method: String, params: List<Any>, errorMessage: String): String {
+        val payload = buildJsonRpcPayload(method, params)
+        val response = docker.postJson(rpcUrl, payload)
 
-    fun getCode(address: String): String {
-        require(address.startsWith("0x")) { "Address must start with 0x" }
-
-        val payload = """
-        {
-          "jsonrpc":"2.0",
-          "id":1,
-          "method":"eth_getCode",
-          "params":["$address","latest"]
-        }
-    """.trimIndent()
-
-        val resp = docker.postJson(rpcUrl, payload)
-
-        if (resp.code != 200) {
-            throw IllegalStateException("Failed to get code: HTTP ${resp.code}\n${resp.body}")
+        if (response.code != HTTP_OK) {
+            val fullMessage = "$errorMessage: HTTP ${response.code}\n${response.body}"
+            logger.error(fullMessage)
+            throw IllegalStateException(fullMessage)
         }
 
+        return parseResultFromResponse(response.body)
+            ?: throw IllegalStateException("Could not parse result from response: ${response.body}")
+    }
+
+    private fun buildJsonRpcPayload(method: String, params: List<Any>): String {
+        val paramsJson = params.joinToString(",") { "\"$it\"" }
+        return """{"jsonrpc":"2.0","id":1,"method":"$method","params":[$paramsJson]}"""
+    }
+
+    private fun parseResultFromResponse(body: String): String? {
         val resultRegex = """"result"\s*:\s*"(0x[0-9a-fA-F]*)"""".toRegex()
-        val match = resultRegex.find(resp.body)
-            ?: throw IllegalStateException("Could not parse code from response: ${resp.body}")
+        return resultRegex.find(body)?.groupValues?.get(1)
+    }
 
-        return match.groupValues[1]
+    // ============================================================
+    // Validation & Formatting
+    // ============================================================
+
+    private fun validateAddress(address: String) {
+        require(address.startsWith("0x")) { "Address must start with 0x: $address" }
+    }
+
+    private fun validateHexData(data: String, name: String) {
+        require(data.startsWith("0x")) { "$name must start with 0x: $data" }
+    }
+
+    private fun formatStorageSlot(slotIndex: Int): String {
+        return "0x${slotIndex.toString(16).padStart(SLOT_HEX_LENGTH, '0')}"
+    }
+
+    private fun formatStorageValue(value: String): String {
+        return "0x${value.padStart(SLOT_HEX_LENGTH, '0')}"
     }
 }
