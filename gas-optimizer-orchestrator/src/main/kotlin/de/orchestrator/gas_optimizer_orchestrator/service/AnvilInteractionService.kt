@@ -3,14 +3,11 @@ package de.orchestrator.gas_optimizer_orchestrator.service
 import de.orchestrator.gas_optimizer_orchestrator.docker.DockerComposeAnvilManager
 import de.orchestrator.gas_optimizer_orchestrator.model.ExecutableInteraction
 import de.orchestrator.gas_optimizer_orchestrator.model.etherscan.FullTransaction
-import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.BytecodeUtil.validateBytecode
 import org.springframework.stereotype.Service
-import org.web3j.crypto.Credentials
 import org.web3j.protocol.Web3j
 import org.web3j.protocol.core.methods.request.Transaction
 import org.web3j.protocol.core.methods.response.TransactionReceipt
-import org.web3j.tx.RawTransactionManager
 import org.web3j.tx.gas.DefaultGasProvider
 import java.math.BigInteger
 import java.util.Optional
@@ -19,11 +16,8 @@ import java.util.Optional
 class AnvilInteractionService(
     private val web3j: Web3j,
     private val anvilManager: DockerComposeAnvilManager,
-    credentials: Credentials,
     private val gasProvider: DefaultGasProvider
 ) {
-
-    private val txManager = RawTransactionManager(web3j, credentials)
 
     fun gasPrice(): BigInteger = gasProvider.gasPrice
     fun gasLimit(): BigInteger = BigInteger("10000000")
@@ -69,7 +63,7 @@ class AnvilInteractionService(
     fun sendRawTransaction(
         from: String,
         to: String?,
-        value: BigInteger,
+        value: BigInteger?,
         gasLimit: BigInteger?,
         gasPrice: BigInteger?,
         data: String
