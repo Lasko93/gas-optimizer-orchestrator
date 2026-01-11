@@ -83,12 +83,7 @@ class DockerComposeCompilerManager(
     /**
      * Compiles without optimization (baseline).
      *
-     * @param solFileName The main Solidity file name
-     * @param solcVersion The compiler version to use
-     * @param remappings Import remappings
-     * @param outFileName Output file name
-     * @param outDirName Output directory name
-     * @return The compiled JSON file
+     * If solc fails with "Stack too deep", retries with `--via-ir` while still keeping optimization disabled.
      */
     fun compileSolcNoOptimizeCombinedJson(
         solFileName: String,
@@ -100,22 +95,36 @@ class DockerComposeCompilerManager(
         logger.info("Compiling {} without optimization", solFileName)
 
         prepareCompilation(solcVersion, solFileName)
-
         val hostOutDir = ensureOutputDirectory(outDirName)
 
-        val script = CompilerScriptBuilder.baselineCompilationScript(
-            solFileName = solFileName,
-            remappings = remappings,
-            outDirName = outDirName,
-            outFileName = outFileName
-        )
+        fun buildScript(viaIr: Boolean): String =
+            CompilerScriptBuilder.baselineCompilationScript(
+                solFileName = solFileName,
+                remappings = remappings,
+                outDirName = outDirName,
+                outFileName = outFileName,
+                viaIr = viaIr
+            )
 
-        executeCompilerScript(script)
+        try {
+            executeCompilerScript(buildScript(viaIr = false))
+        } catch (e: IllegalStateException) {
+            val output = e.message.orEmpty()
+
+            // solc prints: "Compiler error: Stack too deep, try removing local variables."
+            val isStackTooDeep = output.contains("Stack too deep", ignoreCase = true)
+
+            if (!isStackTooDeep) throw e
+
+            logger.warn("solc failed with 'Stack too deep' for {}. Retrying with --via-ir (still no optimize).", solFileName)
+            executeCompilerScript(buildScript(viaIr = true))
+        }
 
         return File(hostOutDir, outFileName).also {
             logger.debug("Output file: {}", it.absolutePath)
         }
     }
+
 
     // ============================================================
     // Directory Management

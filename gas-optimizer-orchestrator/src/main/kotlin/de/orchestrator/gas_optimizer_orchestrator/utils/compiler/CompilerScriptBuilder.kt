@@ -23,26 +23,30 @@ object CompilerScriptBuilder {
 
     /**
      * Generates script for baseline compilation (no optimization).
+     *
+     * @param viaIr If true, adds `--via-ir` while keeping optimization disabled.
      */
     fun baselineCompilationScript(
         solFileName: String,
         remappings: List<String>,
         outDirName: String,
-        outFileName: String
+        outFileName: String,
+        viaIr: Boolean = false
     ): String {
         val remapArgs = formatRemappings(remappings)
+        val viaIrFlag = if (viaIr) "--via-ir \\\n  " else ""
 
         return """
-            set -euo pipefail
-            mkdir -p "/share/$outDirName"
-            cd /share
+        set -euo pipefail
+        mkdir -p "/share/$outDirName"
+        cd /share
 
-            solc $remapArgs \
-              "$solFileName" \
-              ${combinedJsonOutputFlags()} \
-              --allow-paths .,/share \
-              > "/share/$outDirName/$outFileName"
-        """.trimIndent()
+        solc $remapArgs \
+          $viaIrFlag"$solFileName" \
+          ${combinedJsonOutputFlags()} \
+          --allow-paths .,/share \
+          > "/share/$outDirName/$outFileName"
+    """.trimIndent()
     }
 
     /**
