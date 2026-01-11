@@ -15,7 +15,7 @@ services:
         else
           echo "🔧 Starting ANVIL WITHOUT fork...";
           anvil --host 0.0.0.0 --port 8545 \
-                --timestamp "$ANVIL_TIMESTAMP" \
+                --timestamp "${ANVIL_TIMESTAMP:-0}" \
                 --auto-impersonate --chain-id 1 --code-size-limit 4294967295;
         fi
       '

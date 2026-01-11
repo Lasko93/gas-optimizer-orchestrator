@@ -39,7 +39,6 @@ import org.springframework.stereotype.Service
 @Service
 class SolcOptimizerOrchestrator(
     private val compilationPipeline: CompilationPipeline,
-    private val anvilManager: DockerComposeAnvilManager,
     private val anvilService: AnvilInteractionService,
     private val interactionCreationService: InteractionCreationService,
     private val forkReplayService: ForkReplayService,
