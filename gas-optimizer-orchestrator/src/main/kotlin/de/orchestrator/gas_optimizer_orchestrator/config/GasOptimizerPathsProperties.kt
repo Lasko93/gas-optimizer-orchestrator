@@ -5,5 +5,6 @@ import java.nio.file.Path
 
 @ConfigurationProperties(prefix = "gas-optimizer.paths")
 data class GasOptimizerPathsProperties(
-    val externalContractsDir: Path
+    val externalContractsDir: Path,
+    val outputDir: String
 )

@@ -1,6 +1,7 @@
 package de.orchestrator.gas_optimizer_orchestrator.utils.docker
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.io.File
 
@@ -9,10 +10,12 @@ import java.io.File
  */
 @Service
 class DockerCommandExecutor(
-    private val composeFile: File = File("docker-compose.yml")
+    @Value("\${docker.compose-file}")
+    private val composeFilePath: String
 ) {
     private val logger = LoggerFactory.getLogger(DockerCommandExecutor::class.java)
-
+    private val composeFile: File
+        get() = File(composeFilePath)
     // ============================================================
     // Docker Compose Operations
     // ============================================================
@@ -80,7 +83,11 @@ class DockerCommandExecutor(
     }
 
     private fun buildComposeCommand(args: List<String>): List<String> {
-        return listOf("docker", "compose", "-f", composeFile.absolutePath) + args
+        return listOf(
+            "docker", "compose",
+            "-f", composeFile.absolutePath,
+            "-p", "gas-optimizer"
+        ) + args
     }
 
     /**

@@ -1,4 +1,11 @@
+version: "3.8"
+
+name: gas-optimizer
+
 services:
+  # ============================================================
+  # Anvil - Ethereum Fork Node
+  # ============================================================
   anvil:
     image: ghcr.io/foundry-rs/foundry:latest
     container_name: anvil
@@ -26,8 +33,12 @@ services:
       ALCHEMY_API_KEY: "${ALCHEMY_API_KEY:-}"
       ANVIL_FORK_BLOCK: "${ANVIL_FORK_BLOCK:-0}"
       ANVIL_TIMESTAMP: "${ANVIL_TIMESTAMP:-0}"
+    networks:
+      - optimizernet
 
-    networks: [opimizernet]
+  # ============================================================
+  # Compiler - Solidity Compilation Container + Slither
+  # ============================================================
   compiler:
     image: trailofbits/eth-security-toolbox:nightly
     container_name: compiler
@@ -37,7 +48,52 @@ services:
     user: "0:0"
     volumes:
       - ./gas-optimizer-orchestrator/src/main/kotlin/de/orchestrator/gas_optimizer_orchestrator/externalContracts:/share
-    networks: [opimizernet]
+    networks:
+      - optimizernet
+
+  # ============================================================
+  # Orchestrator - Spring Boot Application
+  # ============================================================
+  orchestrator:
+    build:
+      context: ./gas-optimizer-orchestrator
+      dockerfile: Dockerfile
+    container_name: orchestrator
+    volumes:
+      # Mount Docker socket to control sibling containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount docker-compose.yml so we can run compose commands
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      # Shared volume for compiled contracts
+      - ./gas-optimizer-orchestrator/src/main/kotlin/de/orchestrator/gas_optimizer_orchestrator/externalContracts:/share
+    environment:
+      # Web3 / Anvil - use container name for networking
+      WEB3_HTTP_URL: http://anvil:8545
+      ALCHEMY_API_KEY: ${ALCHEMY_API_KEY}
+      ETHERSCAN_API_KEY: ${ETHERSCAN_API_KEY}
+      EXTERNAL_CONTRACTS_DIR: /share
+      # Docker compose file location inside container
+      DOCKER_COMPOSE_FILE: /app/docker-compose.yml
+      # Java
+      JAVA_OPTS: "-Xmx512m"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - anvil
+      - compiler
+    networks:
+      - optimizernet
+
+# ============================================================
+# Volumes
+# ============================================================
+volumes:
+  shared-contracts:
+    driver: local
+
+# ============================================================
+# Networks
+# ============================================================
 networks:
-  opimizernet:
+  optimizernet:
     driver: bridge

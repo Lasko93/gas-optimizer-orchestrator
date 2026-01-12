@@ -15,19 +15,24 @@ import java.math.BigInteger
  * - Account impersonation and funding
  * - Storage and bytecode manipulation
  * - State queries (storage, code)
+ *
+ * When running inside a container with Docker socket mounted,
+ * this class controls the sibling Anvil container via docker compose up/restart.
+ * RPC calls go directly to anvil:8545 (container networking).
  */
 @Service
 class DockerComposeAnvilManager(
     private val dockerCommandExecutor: DockerCommandExecutor,
     private val dockerHttpClient: SimpleHttpClient,
-    @Value("\${web3.http-url:http://127.0.0.1:8545}")
-    private val rpcUrl: String
+    @Value("\${web3.http-url}")
+    private val rpcUrl: String,
+    @Value("\${anvil.alchemy-api-key}")
+    private val alchemyApiKey: String
 ) {
     private val logger = LoggerFactory.getLogger(DockerComposeAnvilManager::class.java)
 
     companion object {
         private const val SERVICE_NAME = "anvil"
-        private const val ALCHEMY_API_KEY_ENV = "ALCHEMY_API_KEY"
         private const val HTTP_OK = 200
         private const val SLOT_HEX_LENGTH = 64
 
@@ -55,7 +60,7 @@ class DockerComposeAnvilManager(
         return try {
             fn()
         } finally {
-
+            // Could add cleanup here if needed
         }
     }
 
@@ -82,12 +87,17 @@ class DockerComposeAnvilManager(
         enableFork: Boolean,
         blockNumber: Long,
         timeStamp: String
-    ): Map<String, String> = mapOf(
-        "ENABLE_FORK" to enableFork.toString(),
-        "ANVIL_FORK_BLOCK" to blockNumber.toString(),
-        "ALCHEMY_API_KEY" to (System.getenv(ALCHEMY_API_KEY_ENV) ?: ""),
-        "ANVIL_TIMESTAMP" to timeStamp
-    )
+    ): Map<String, String> {
+        // Use injected alchemyApiKey first, fall back to env var
+        val apiKey = alchemyApiKey.ifBlank { System.getenv("ALCHEMY_API_KEY") ?: "" }
+
+        return mapOf(
+            "ENABLE_FORK" to enableFork.toString(),
+            "ANVIL_FORK_BLOCK" to blockNumber.toString(),
+            "ALCHEMY_API_KEY" to apiKey,
+            "ANVIL_TIMESTAMP" to timeStamp
+        )
+    }
 
     // ============================================================
     // Account Management

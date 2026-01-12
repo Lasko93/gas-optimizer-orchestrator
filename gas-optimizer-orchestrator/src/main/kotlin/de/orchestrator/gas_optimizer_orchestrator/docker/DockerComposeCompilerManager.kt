@@ -5,6 +5,7 @@ import de.orchestrator.gas_optimizer_orchestrator.utils.compiler.CompilerScriptB
 import de.orchestrator.gas_optimizer_orchestrator.utils.compiler.SolcVersionUtil
 import de.orchestrator.gas_optimizer_orchestrator.utils.docker.DockerCommandExecutor
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.io.File
 
@@ -15,17 +16,22 @@ import java.io.File
  * - Baseline compilation (no optimization)
  * - Optimized compilation with various run settings
  * - Solc version management
+ *
+ * When running inside a container with Docker socket mounted,
+ * this class controls the sibling compiler container via docker compose exec.
+ * The shared volume (/share) is mounted in both containers.
  */
 @Service
 class DockerComposeCompilerManager(
     private val dockerCommandExecutor: DockerCommandExecutor,
-    private val paths: GasOptimizerPathsProperties
+    private val paths: GasOptimizerPathsProperties,
+    @Value("\${gas-optimizer.paths.output-dir}")
+    private val defaultOutDir: String,
 ) {
     private val logger = LoggerFactory.getLogger(DockerComposeCompilerManager::class.java)
 
     companion object {
         private const val SERVICE_NAME = "compiler"
-        private const val DEFAULT_OUT_DIR = "out"
         private const val DEFAULT_BASELINE_FILENAME = "baseline_noopt.json"
         private val DEFAULT_OPTIMIZER_RUNS = listOf(1, 200, 10_000)
     }
@@ -53,7 +59,7 @@ class DockerComposeCompilerManager(
         solcVersion: String,
         remappings: List<String> = emptyList(),
         runsList: List<Int> = DEFAULT_OPTIMIZER_RUNS,
-        outDirName: String = DEFAULT_OUT_DIR,
+        outDirName: String = defaultOutDir,
         viaIrRuns: Boolean = true
     ): List<File> {
         logger.info("Compiling {} with optimizer runs: {} (viaIR={})", solFileName, runsList, viaIrRuns)
@@ -90,7 +96,7 @@ class DockerComposeCompilerManager(
         solcVersion: String,
         remappings: List<String> = emptyList(),
         outFileName: String = DEFAULT_BASELINE_FILENAME,
-        outDirName: String = DEFAULT_OUT_DIR
+        outDirName: String = defaultOutDir
     ): File {
         logger.info("Compiling {} without optimization", solFileName)
 
