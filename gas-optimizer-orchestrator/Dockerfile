@@ -17,6 +17,9 @@ RUN ./gradlew dependencies --no-daemon || true
 # Copy source code
 COPY --chown=gradle:gradle src ./src
 
+# Make gradlew executable
+RUN chmod +x ./gradlew
+
 # Build the application
 RUN ./gradlew clean bootJar --no-daemon
 
