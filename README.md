@@ -96,7 +96,7 @@ Nur im Proxy-Fall relevant: sorgt dafür, dass das Replay gegen die gewünschte 
     - `8080` (Orchestrator API)
     - `8545` (Anvil JSON-RPC)
 
-> Damit der Orchestrator die benötigten Smart-Contract-Daten (Etherscan) und Fork-Daten (Alchemy) beziehen kann, müssen die beiden API-Keys **`ETHERSCAN_API_KEY`** und **`ALCHEMY_RPC_URL`** in einer **`.env` Datei im Projekt-Root** hinterlegt werden. Anschließend kann die Anwendung bzw. die zugehörige Toolchain/Infrastruktur mit **`docker compose up -d`** gestartet werden.
+> Damit der Orchestrator die benötigten Smart-Contract-Daten (Etherscan) und Fork-Daten (Alchemy) beziehen kann, müssen die beiden API-Keys **`ETHERSCAN_API_KEY`** und **`ALCHEMY_API_KEY`** in einer **`.env` Datei im Projekt-Root** hinterlegt werden. Anschließend kann die Anwendung bzw. die zugehörige Toolchain/Infrastruktur mit **`docker compose up -d`** gestartet werden.
 
 ### 5. API Request senden
 
